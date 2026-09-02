@@ -33,6 +33,12 @@ impl OpaqueOperation {
     pub(super) const B: Self = Self(2);
 }
 
+#[derive(Clone)]
+pub(super) struct NegotiatedProfile {
+    pub(super) profile: LinuxNtProfile,
+    pub(super) manifest_digest: Digest32,
+}
+
 pub(super) fn runtime() -> Result<RuntimeDescriptor, Box<dyn std::error::Error>> {
     let build_digest = Sha256::digest(concat!(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")));
     Ok(RuntimeDescriptor::new(
@@ -101,7 +107,7 @@ pub(super) async fn negotiate_profile(
     runtime: &RuntimeDescriptor,
     config: &ProcessConfig,
     requested_access: RequestedAccess,
-) -> Result<LinuxNtProfile, Box<dyn std::error::Error>> {
+) -> Result<NegotiatedProfile, Box<dyn std::error::Error>> {
     let request = ceylith.profile_request(
         ProfileId::from_bytes(config.profile_id),
         None,
@@ -116,7 +122,10 @@ pub(super) async fn negotiate_profile(
     let ProfileOutcome::Ready(ready) = verifier.verify(decision, now_ms()?)? else {
         return Err(io::Error::other("Ceylith Profile is not ready").into());
     };
-    decode_linux_manifest(ready.manifest()).map_err(Into::into)
+    Ok(NegotiatedProfile {
+        profile: decode_linux_manifest(ready.manifest())?,
+        manifest_digest: ready.manifest_digest(),
+    })
 }
 
 pub(super) fn profile_peer(profile: &LinuxNtProfile) -> Result<&[u8], io::Error> {

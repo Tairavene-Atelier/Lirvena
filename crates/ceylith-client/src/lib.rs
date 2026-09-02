@@ -10,6 +10,7 @@ mod opaque;
 mod profile;
 mod runtime;
 mod tcp;
+mod telemetry;
 
 pub use action::{
     ActionDirective, ActionFlowUpdate, ActionMark, action_flow_inputs, decode_action_flow_update,
@@ -27,3 +28,4 @@ pub use opaque::{OpaqueExchangeContext, OpaqueExchangeResult, decode_opaque_exch
 pub use profile::ProfileVerifier;
 pub use runtime::{Architecture, Platform, RuntimeDescriptor};
 pub use tcp::CeylithTcpClient;
+pub use telemetry::{CommunityTelemetrySigner, CommunityTelemetrySpec, decode_telemetry_receipt};

@@ -37,12 +37,12 @@ fn profile_request_round_trips_under_structural_validation() -> Result<(), Codec
 
 #[test]
 fn body_namespace_is_fail_closed_but_metadata_can_extend() {
-    let valid = [0x08, 0x03, 0x82, 0x01, 0x02, 0x08, 0x01];
+    let valid = [0x08, 0x04, 0x82, 0x01, 0x02, 0x08, 0x01];
     let mut metadata = vec![0x10, 0x07];
     metadata.extend_from_slice(&valid);
     assert!(decode_inner_frame(&metadata, WireLimits::default()).is_ok());
 
-    let unknown_body = [0x08, 0x03, 0xa2, 0x01, 0x00];
+    let unknown_body = [0x08, 0x04, 0xb2, 0x01, 0x00];
     assert_eq!(
         decode_inner_frame(&unknown_body, WireLimits::default()).err(),
         Some(CodecError::UnsupportedBody)
@@ -64,7 +64,7 @@ fn malformed_or_missing_contracts_are_rejected() {
         Some(CodecError::InvalidContract)
     );
 
-    let malformed_length = [0x08, 0x03, 0x82, 0x01, 0x05, 0x08];
+    let malformed_length = [0x08, 0x04, 0x82, 0x01, 0x05, 0x08];
     assert!(matches!(
         decode_inner_frame(&malformed_length, WireLimits::default()),
         Err(CodecError::Truncated { .. })

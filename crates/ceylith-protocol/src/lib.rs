@@ -9,6 +9,7 @@ mod inner;
 mod opaque;
 mod profile;
 mod session;
+mod telemetry;
 mod watch;
 
 /// Types generated from the public `ceylith.v2` schema.
@@ -37,7 +38,7 @@ pub use frame::{
 };
 pub use ids::{
     AccountSlotId, ActionFlowId, ActionId, Digest32, ExchangeId, FixedBytesLengthError, IncidentId,
-    InstallationId, ProfileId, RequestId, SessionId,
+    InstallationId, ProfileId, RequestId, SessionId, TelemetryReportId,
 };
 pub use inner::{CURRENT_INNER_CONTRACT, decode_inner_frame, encode_inner_frame};
 pub use opaque::{OpaqueSlot, OpaqueSlotId, OpaqueSlots, opaque_binding_digest};
@@ -45,6 +46,10 @@ pub use profile::{ProfileOutcome, ReadyProfile, decode_profile_outcome};
 pub use session::{
     GrantClass, SessionAdmission, decode_session_welcome, profile_decision_signing_transcript,
     session_hello_signing_transcript, validate_client_runtime, validate_session_hello,
+};
+pub use telemetry::{
+    AccountChurnBucket, ActiveDurationBucket, GroupCountBucket, MessageCountBucket,
+    telemetry_signing_transcript,
 };
 pub use watch::{
     RenewalState, WatchEvent, WatchEventKind, WatchGrantSnapshot, WatchOutcome,

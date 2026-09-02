@@ -1,0 +1,20 @@
+[package]
+name = "community-telemetry"
+description = "Private local aggregation for Lirvena Community telemetry."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+ceylith-protocol = { version = "=0.0.0", path = "../ceylith-protocol" }
+local-state = { version = "=0.0.0", path = "../local-state" }
+rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled"] }
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true

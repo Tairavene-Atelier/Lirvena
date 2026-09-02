@@ -16,6 +16,8 @@ mod qq;
 mod qr;
 #[cfg(target_os = "linux")]
 mod support;
+#[cfg(target_os = "linux")]
+mod telemetry;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

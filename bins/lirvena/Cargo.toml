@@ -14,6 +14,7 @@ account-runtime = { version = "=0.0.0", path = "../../crates/account-runtime" }
 ceylith-client = { version = "=0.0.0", path = "../../crates/ceylith-client" }
 ceylith-crypto = { version = "=0.0.0", path = "../../crates/ceylith-crypto" }
 ceylith-protocol = { version = "=0.0.0", path = "../../crates/ceylith-protocol" }
+community-telemetry = { version = "=0.0.0", path = "../../crates/community-telemetry" }
 getrandom = "=0.4.3"
 local-state = { version = "=0.0.0", path = "../../crates/local-state" }
 notify-runtime = { version = "=0.0.0", path = "../../crates/notify-runtime" }
