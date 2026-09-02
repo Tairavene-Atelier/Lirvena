@@ -8,6 +8,7 @@ mod notice;
 mod outbound;
 mod proto;
 mod recall;
+mod recall_response;
 mod request;
 mod rich_text;
 
@@ -23,6 +24,7 @@ pub use outbound::{
 pub use recall::{
     GroupRecallInput, PrivateRecallInput, encode_group_recall, encode_private_recall,
 };
+pub use recall_response::{validate_group_recall_response, validate_private_recall_response};
 pub use request::{GroupRequestSignal, decode_group_request_signal};
 pub use rich_text::{
     FaceKind, FaceSegment, ImageSegment, MediaFile, MediaScope, MentionSegment, MentionTarget,
