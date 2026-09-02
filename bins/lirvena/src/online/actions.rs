@@ -1,8 +1,11 @@
 use std::collections::BTreeMap;
 
 use account_api::{AccountActionError, AccountActionRequest, AccountIdentity};
+use adapter_onebot::{MessageSegment, parse_message};
 use qq_directory::FriendEntry;
-use qq_message::{SendTextInput, SendTextTarget, encode_text_message, parse_send_message_response};
+use qq_message::{
+    OutboundSegment, SendMessageInput, SendTextTarget, encode_message, parse_send_message_response,
+};
 use serde_json::{Value, json};
 
 use super::controls;
@@ -105,10 +108,10 @@ async fn send_private_text(
         .get(&uin)
         .map(|friend| friend.uid.clone())
         .ok_or(AccountActionError::Unsupported)?;
-    let text = plain_text(request.params().get("message"), request.params())?;
-    send_text(
+    let segments = compile_segments(request, None, packets, pushes, context).await?;
+    send_segments(
         SendTextTarget::Private { uin, uid: &uid },
-        &text,
+        &segments,
         packets,
         pushes,
         context,
@@ -126,10 +129,10 @@ async fn send_group_text(
         return Err(AccountActionError::Unsupported);
     }
     let group_code = required_u32(request.params().get("group_id"))?;
-    let text = plain_text(request.params().get("message"), request.params())?;
-    send_text(
+    let segments = compile_segments(request, Some(group_code), packets, pushes, context).await?;
+    send_segments(
         SendTextTarget::Group { group_code },
-        &text,
+        &segments,
         packets,
         pushes,
         context,
@@ -137,16 +140,20 @@ async fn send_group_text(
     .await
 }
 
-async fn send_text(
+async fn send_segments(
     target: SendTextTarget<'_>,
-    text: &str,
+    segments: &[CompiledSegment],
     packets: &PacketRuntime,
     pushes: &PushRuntime,
     context: &mut OnlineContext<'_>,
 ) -> Result<Value, AccountActionError> {
-    let body = encode_text_message(&SendTextInput {
+    let outbound = segments
+        .iter()
+        .map(CompiledSegment::borrowed)
+        .collect::<Vec<_>>();
+    let body = encode_message(&SendMessageInput {
         target,
-        text,
+        segments: &outbound,
         client_sequence: random_nonzero_u32().map_err(|_error| AccountActionError::QqFailure)?,
         random: random_nonzero_u32().map_err(|_error| AccountActionError::QqFailure)?,
         unix_seconds: now_seconds().map_err(|_error| AccountActionError::QqFailure)?,
@@ -177,37 +184,122 @@ async fn send_text(
     Ok(json!({"message_id": outcome.sequence}))
 }
 
-fn plain_text(
-    value: Option<&Value>,
-    params: &serde_json::Map<String, Value>,
-) -> Result<String, AccountActionError> {
-    match value {
-        Some(Value::String(value)) => {
-            if params.get("auto_escape").and_then(Value::as_bool) != Some(true)
-                && value.contains("[CQ:")
-            {
-                return Err(AccountActionError::Unsupported);
-            }
-            Ok(value.clone())
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum CompiledSegment {
+    Text(String),
+    MentionEveryone {
+        display: String,
+    },
+    Mention {
+        uin: u32,
+        uid: String,
+        display: String,
+    },
+    Face(u16),
+}
+
+impl CompiledSegment {
+    fn borrowed(&self) -> OutboundSegment<'_> {
+        match self {
+            Self::Text(value) => OutboundSegment::Text(value),
+            Self::MentionEveryone { display } => OutboundSegment::MentionEveryone { display },
+            Self::Mention { uin, uid, display } => OutboundSegment::Mention {
+                uin: *uin,
+                uid,
+                display,
+            },
+            Self::Face(value) => OutboundSegment::Face(*value),
         }
-        Some(Value::Array(segments)) => segments
-            .iter()
-            .map(|segment| {
-                let object = segment
-                    .as_object()
-                    .ok_or(AccountActionError::BadParameters)?;
-                if object.get("type").and_then(Value::as_str) != Some("text") {
-                    return Err(AccountActionError::Unsupported);
-                }
-                object
-                    .get("data")
-                    .and_then(Value::as_object)
-                    .and_then(|data| data.get("text"))
-                    .and_then(Value::as_str)
-                    .map(str::to_owned)
-                    .ok_or(AccountActionError::BadParameters)
-            })
-            .collect::<Result<String, _>>(),
-        Some(_) | None => Err(AccountActionError::BadParameters),
     }
+}
+
+async fn compile_segments(
+    request: &AccountActionRequest,
+    group_id: Option<u32>,
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    context: &mut OnlineContext<'_>,
+) -> Result<Vec<CompiledSegment>, AccountActionError> {
+    let auto_escape = request
+        .params()
+        .get("auto_escape")
+        .map(|value| value.as_bool().ok_or(AccountActionError::BadParameters))
+        .transpose()?
+        .unwrap_or(false);
+    let raw = request
+        .params()
+        .get("message")
+        .ok_or(AccountActionError::BadParameters)?;
+    let segments =
+        parse_message(raw, auto_escape).map_err(|_error| AccountActionError::BadParameters)?;
+    let needs_members = segments.iter().any(|segment| {
+        segment.kind() == "at" && segment.data().get("qq").and_then(Value::as_str) != Some("all")
+    });
+    let members = match (group_id, needs_members) {
+        (Some(group_id), true) => {
+            Some(directory::group_members(group_id, packets, pushes, context).await?)
+        }
+        (None, true) => return Err(AccountActionError::Unsupported),
+        (_, false) => None,
+    };
+    segments
+        .iter()
+        .map(|segment| compile_segment(segment, group_id, members.as_deref()))
+        .collect()
+}
+
+fn compile_segment(
+    segment: &MessageSegment,
+    group_id: Option<u32>,
+    members: Option<&[qq_directory::GroupMember]>,
+) -> Result<CompiledSegment, AccountActionError> {
+    match segment.kind() {
+        "text" => segment
+            .data()
+            .get("text")
+            .and_then(Value::as_str)
+            .map(|value| CompiledSegment::Text(value.to_owned()))
+            .ok_or(AccountActionError::BadParameters),
+        "face" => segment_u32(segment.data().get("id"))
+            .and_then(|value| u16::try_from(value).ok())
+            .map(CompiledSegment::Face)
+            .ok_or(AccountActionError::BadParameters),
+        "at" if group_id.is_some() => {
+            let target = segment
+                .data()
+                .get("qq")
+                .ok_or(AccountActionError::BadParameters)?;
+            if target.as_str() == Some("all") {
+                return Ok(CompiledSegment::MentionEveryone {
+                    display: "@全体成员".to_owned(),
+                });
+            }
+            let uin = segment_u32(Some(target)).ok_or(AccountActionError::BadParameters)?;
+            let member = members
+                .and_then(|values| values.iter().find(|value| value.uin == uin))
+                .ok_or(AccountActionError::QqFailure)?;
+            let name = if member.card.is_empty() {
+                &member.nickname
+            } else {
+                &member.card
+            };
+            Ok(CompiledSegment::Mention {
+                uin,
+                uid: member.uid.clone(),
+                display: format!("@{name}"),
+            })
+        }
+        "at" => Err(AccountActionError::Unsupported),
+        _ => Err(AccountActionError::Unsupported),
+    }
+}
+
+fn segment_u32(value: Option<&Value>) -> Option<u32> {
+    value
+        .and_then(|value| match value {
+            Value::Number(number) => number.as_u64(),
+            Value::String(value) => value.parse().ok(),
+            _ => None,
+        })
+        .and_then(|value| u32::try_from(value).ok())
 }

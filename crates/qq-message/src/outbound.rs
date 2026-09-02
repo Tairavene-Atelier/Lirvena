@@ -3,6 +3,8 @@ use prost::Message;
 use crate::MessageDecodeError;
 
 const MAX_TEXT_BYTES: usize = 4_500;
+const MAX_ELEMENTS: usize = 256;
+const MAX_DISPLAY_BYTES: usize = 1_024;
 
 /// Address of one text-message recipient.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -36,6 +38,44 @@ pub struct SendTextInput<'a> {
     pub unix_seconds: u32,
 }
 
+/// One compiled outbound message element.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum OutboundSegment<'a> {
+    /// Plain UTF-8 text.
+    Text(&'a str),
+    /// Mention every member in a group.
+    MentionEveryone {
+        /// Human-readable preview carried by QQ.
+        display: &'a str,
+    },
+    /// Mention one resolved group member.
+    Mention {
+        /// Numeric QQ identifier.
+        uin: u32,
+        /// Current Linux NT UID.
+        uid: &'a str,
+        /// Human-readable preview carried by QQ.
+        display: &'a str,
+    },
+    /// One classic QQ face identifier.
+    Face(u16),
+}
+
+/// Bounded input for one ordinary QQ rich-text message.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SendMessageInput<'a> {
+    /// Recipient routing.
+    pub target: SendTextTarget<'a>,
+    /// Already resolved outbound elements.
+    pub segments: &'a [OutboundSegment<'a>],
+    /// Non-zero local client sequence.
+    pub client_sequence: u32,
+    /// Non-zero local message random.
+    pub random: u32,
+    /// Current Unix time used by the private-message control field.
+    pub unix_seconds: u32,
+}
+
 /// Parsed QQ send acknowledgement.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SendTextOutcome {
@@ -54,8 +94,24 @@ pub struct SendTextOutcome {
 /// Returns an error for empty or oversized text, zero correlations, invalid private UID or an
 /// out-of-range Unix timestamp.
 pub fn encode_text_message(input: &SendTextInput<'_>) -> Result<Vec<u8>, MessageDecodeError> {
-    if input.text.is_empty()
-        || input.text.len() > MAX_TEXT_BYTES
+    encode_message(&SendMessageInput {
+        target: input.target.clone(),
+        segments: &[OutboundSegment::Text(input.text)],
+        client_sequence: input.client_sequence,
+        random: input.random,
+        unix_seconds: input.unix_seconds,
+    })
+}
+
+/// Encodes the tested Linux NT `MessageSvc.PbSendMsg` protobuf body.
+///
+/// # Errors
+///
+/// Returns an error for invalid routing, empty/excessive elements, unresolved mentions, unsupported
+/// face IDs, zero correlations, or an out-of-range Unix timestamp.
+pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDecodeError> {
+    if input.segments.is_empty()
+        || input.segments.len() > MAX_ELEMENTS
         || input.client_sequence == 0
         || input.random == 0
     {
@@ -99,6 +155,52 @@ pub fn encode_text_message(input: &SendTextInput<'_>) -> Result<Vec<u8>, Message
     } else {
         None
     };
+    let mut text_bytes = 0usize;
+    let elements = input
+        .segments
+        .iter()
+        .map(|segment| match segment {
+            OutboundSegment::Text(value) if !value.is_empty() => {
+                text_bytes = text_bytes
+                    .checked_add(value.len())
+                    .ok_or(MessageDecodeError)?;
+                Ok(Element {
+                    text: Some(Text {
+                        value: Some((*value).to_owned()),
+                        reserve: None,
+                    }),
+                    face: None,
+                })
+            }
+            OutboundSegment::MentionEveryone { display } if valid_display(display) => {
+                text_bytes = text_bytes
+                    .checked_add(display.len())
+                    .ok_or(MessageDecodeError)?;
+                Ok(mention_element(display, 1, 0, ""))
+            }
+            OutboundSegment::Mention { uin, uid, display }
+                if *uin != 0 && valid_uid(uid) && valid_display(display) =>
+            {
+                text_bytes = text_bytes
+                    .checked_add(display.len())
+                    .ok_or(MessageDecodeError)?;
+                Ok(mention_element(display, 2, *uin, uid))
+            }
+            OutboundSegment::Face(id) if *id < 260 => Ok(Element {
+                text: None,
+                face: Some(Face {
+                    index: Some(i32::from(*id)),
+                }),
+            }),
+            OutboundSegment::Text(_)
+            | OutboundSegment::MentionEveryone { .. }
+            | OutboundSegment::Mention { .. }
+            | OutboundSegment::Face(_) => Err(MessageDecodeError),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if text_bytes > MAX_TEXT_BYTES {
+        return Err(MessageDecodeError);
+    }
     Ok(MessageWire {
         routing: Some(routing),
         content: Some(ContentHead {
@@ -107,19 +209,41 @@ pub fn encode_text_message(input: &SendTextInput<'_>) -> Result<Vec<u8>, Message
             c2c_command: Some(0),
         }),
         body: Some(MessageBody {
-            rich_text: Some(RichText {
-                elements: vec![Element {
-                    text: Some(Text {
-                        value: Some(input.text.to_owned()),
-                    }),
-                }],
-            }),
+            rich_text: Some(RichText { elements }),
         }),
         client_sequence: Some(input.client_sequence),
         random: Some(input.random),
         control,
     }
     .encode_to_vec())
+}
+
+fn mention_element(display: &str, kind: i32, uin: u32, uid: &str) -> Element {
+    Element {
+        text: Some(Text {
+            value: Some(display.to_owned()),
+            reserve: Some(
+                MentionExtra {
+                    kind: Some(kind),
+                    uin: Some(uin),
+                    field5: Some(0),
+                    uid: Some(uid.to_owned()),
+                }
+                .encode_to_vec(),
+            ),
+        }),
+        face: None,
+    }
+}
+
+fn valid_uid(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 128 && !value.chars().any(char::is_control)
+}
+
+fn valid_display(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_DISPLAY_BYTES
+        && !value.chars().any(|character| character == '\0')
 }
 
 /// Parses one `MessageSvc.PbSendMsg` response.
@@ -204,12 +328,34 @@ struct RichText {
 struct Element {
     #[prost(message, optional, tag = "1")]
     text: Option<Text>,
+    #[prost(message, optional, tag = "2")]
+    face: Option<Face>,
 }
 
 #[derive(Clone, PartialEq, Message)]
 struct Text {
     #[prost(string, optional, tag = "1")]
     value: Option<String>,
+    #[prost(bytes = "vec", optional, tag = "12")]
+    reserve: Option<Vec<u8>>,
+}
+
+#[derive(Clone, Copy, PartialEq, Message)]
+struct Face {
+    #[prost(int32, optional, tag = "1")]
+    index: Option<i32>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct MentionExtra {
+    #[prost(int32, optional, tag = "3")]
+    kind: Option<i32>,
+    #[prost(uint32, optional, tag = "4")]
+    uin: Option<u32>,
+    #[prost(int32, optional, tag = "5")]
+    field5: Option<i32>,
+    #[prost(string, optional, tag = "9")]
+    uid: Option<String>,
 }
 
 #[derive(Clone, Copy, PartialEq, Message)]

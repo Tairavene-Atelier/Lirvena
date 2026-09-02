@@ -11,8 +11,8 @@ pub use decoder::{MessageDecoder, MessageDisposition};
 pub use error::MessageDecodeError;
 pub use model::{MessageClass, MessageEnvelope, MessagePayload, MessageRoute};
 pub use outbound::{
-    SendTextInput, SendTextOutcome, SendTextTarget, encode_text_message,
-    parse_send_message_response,
+    OutboundSegment, SendMessageInput, SendTextInput, SendTextOutcome, SendTextTarget,
+    encode_message, encode_text_message, parse_send_message_response,
 };
 pub use rich_text::{
     FaceKind, FaceSegment, ImageSegment, MediaFile, MediaScope, MentionSegment, MentionTarget,

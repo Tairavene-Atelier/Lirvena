@@ -1,6 +1,10 @@
 //! Plain-text send packet golden vectors.
 
-use qq_message::{SendTextInput, SendTextTarget, encode_text_message, parse_send_message_response};
+use prost::Message;
+use qq_message::{
+    OutboundSegment, SendMessageInput, SendTextInput, SendTextTarget, encode_message,
+    encode_text_message, parse_send_message_response,
+};
 
 #[test]
 fn group_text_matches_tested_protobuf_shape() -> Result<(), Box<dyn std::error::Error>> {
@@ -48,4 +52,112 @@ fn send_response_requires_a_success_sequence() -> Result<(), Box<dyn std::error:
     assert_eq!(parsed.timestamp, 100);
     assert!(parse_send_message_response(&[0x08, 0x00]).is_err());
     Ok(())
+}
+
+#[test]
+fn group_mentions_and_classic_face_keep_wire_order() -> Result<(), Box<dyn std::error::Error>> {
+    let segments = [
+        OutboundSegment::Text("hi"),
+        OutboundSegment::MentionEveryone { display: "@all" },
+        OutboundSegment::Mention {
+            uin: 42,
+            uid: "u_target",
+            display: "@target",
+        },
+        OutboundSegment::Face(14),
+    ];
+    let encoded = encode_message(&SendMessageInput {
+        target: SendTextTarget::Group { group_code: 7 },
+        segments: &segments,
+        client_sequence: 8,
+        random: 9,
+        unix_seconds: 10,
+    })?;
+    let message = TestMessage::decode(encoded.as_slice())?;
+    let elements = message
+        .body
+        .and_then(|body| body.rich_text)
+        .ok_or("missing rich text")?
+        .elements;
+    assert_eq!(elements.len(), 4);
+    assert_eq!(
+        elements[0]
+            .text
+            .as_ref()
+            .and_then(|text| text.value.as_deref()),
+        Some("hi")
+    );
+    let everyone = MentionExtra::decode(
+        elements[1]
+            .text
+            .as_ref()
+            .and_then(|text| text.reserve.as_deref())
+            .ok_or("missing everyone reserve")?,
+    )?;
+    assert_eq!((everyone.kind, everyone.uin), (Some(1), Some(0)));
+    let member = MentionExtra::decode(
+        elements[2]
+            .text
+            .as_ref()
+            .and_then(|text| text.reserve.as_deref())
+            .ok_or("missing member reserve")?,
+    )?;
+    assert_eq!(member.kind, Some(2));
+    assert_eq!(member.uin, Some(42));
+    assert_eq!(member.uid.as_deref(), Some("u_target"));
+    assert_eq!(
+        elements[3].face.as_ref().and_then(|face| face.index),
+        Some(14)
+    );
+    Ok(())
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestMessage {
+    #[prost(message, optional, tag = "3")]
+    body: Option<TestBody>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestBody {
+    #[prost(message, optional, tag = "1")]
+    rich_text: Option<TestRichText>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestRichText {
+    #[prost(message, repeated, tag = "2")]
+    elements: Vec<TestElement>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestElement {
+    #[prost(message, optional, tag = "1")]
+    text: Option<TestText>,
+    #[prost(message, optional, tag = "2")]
+    face: Option<TestFace>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestText {
+    #[prost(string, optional, tag = "1")]
+    value: Option<String>,
+    #[prost(bytes = "vec", optional, tag = "12")]
+    reserve: Option<Vec<u8>>,
+}
+
+#[derive(Clone, Copy, PartialEq, Message)]
+struct TestFace {
+    #[prost(int32, optional, tag = "1")]
+    index: Option<i32>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct MentionExtra {
+    #[prost(int32, optional, tag = "3")]
+    kind: Option<i32>,
+    #[prost(uint32, optional, tag = "4")]
+    uin: Option<u32>,
+    #[prost(string, optional, tag = "9")]
+    uid: Option<String>,
 }

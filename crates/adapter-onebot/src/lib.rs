@@ -6,6 +6,7 @@ mod backend;
 mod dispatch;
 mod event;
 mod id;
+mod message;
 mod quick;
 mod response;
 mod transport;
@@ -15,6 +16,7 @@ pub use backend::{AccountChannelBackend, BackendCall, BackendError, OneBotBacken
 pub use dispatch::{DispatcherConfig, OneBotDispatcher};
 pub use event::{EventProjectionError, project_account_event};
 pub use id::IdFormat;
+pub use message::{MessageParseError, MessageSegment, parse_message};
 pub use response::ActionResponse;
 pub use transport::{
     EventBusError, ForwardServerConfig, HttpEventReporter, HttpEventReporterConfig, OneBotEventBus,
