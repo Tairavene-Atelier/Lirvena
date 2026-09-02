@@ -1,3 +1,5 @@
+use account_api::{AccountActionReceiver, AccountEvent, AccountEventPublisher, AccountIdentity};
+use account_runtime::{AccountHandle, AccountPhase, AccountTransition};
 use ceylith_client::InstallationClient;
 use ceylith_protocol::AccountSlotId;
 use qq_domain::{LoginMachine, LoginState};
@@ -24,6 +26,7 @@ pub(super) async fn run(
     profile: &LinuxNtProfile,
     account: &AccountHandle,
     events: &AccountEventPublisher,
+    actions: AccountActionReceiver,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut login = LoginMachine::new();
     let _event = begin_qr_request(&mut login, now_ms()?)?;
@@ -140,10 +143,19 @@ pub(super) async fn run(
     eprintln!("Lirvena completed the required online startup gates");
     eprintln!("Lirvena QQ session is online; press Ctrl-C to stop.");
     online
-        .run(&mut qq, profile, &credential, secrets.uin())
+        .run(
+            OnlineContext {
+                ceylith,
+                qq: &mut qq,
+                profile,
+                device: &device,
+                credential: &credential,
+                uin: secrets.uin(),
+                account_slot_id,
+            },
+            actions,
+        )
         .await?;
     let _previous = login.transition(LoginState::Stopped)?;
     Ok(())
 }
-use account_api::{AccountEvent, AccountEventPublisher, AccountIdentity};
-use account_runtime::{AccountHandle, AccountPhase, AccountTransition};

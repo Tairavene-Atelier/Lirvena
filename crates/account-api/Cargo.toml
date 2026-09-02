@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 account-runtime = { version = "=0.0.0", path = "../account-runtime" }
 qq-message = { version = "=0.0.0", path = "../qq-message" }
+serde_json = "=1.0.151"
 tokio = { version = "=1.53.1", features = ["sync"] }
 
 [dev-dependencies]

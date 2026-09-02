@@ -1,9 +1,13 @@
+use std::collections::BTreeMap;
 use std::io;
 use std::time::Duration;
 
-use account_api::{AccountEvent, AccountEventPublisher, AccountIdentity, InboundMessage};
+use account_api::{
+    AccountActionReceiver, AccountEvent, AccountEventPublisher, AccountIdentity, InboundMessage,
+};
 use ceylith_client::InstallationClient;
 use ceylith_protocol::AccountSlotId;
+use qq_directory::FriendEntry;
 use qq_domain::{OnlineAction, OnlineDirective, OnlineGeneration, OnlineMachine, OnlineState};
 use qq_login::{CredentialLogin, QrDevice};
 use qq_profile::{LinuxNtProfile, decode_online_plan};
@@ -11,6 +15,7 @@ use qq_session::AuthenticatedSession;
 use tokio::net::TcpStream;
 use tokio::time::sleep;
 
+use super::actions::execute_account_action;
 use super::packets::{PacketContext, PacketRuntime};
 use super::push::PushRuntime;
 use crate::action_runtime::{self, BootstrapContext};
@@ -35,6 +40,7 @@ pub(crate) struct OnlineRuntime {
     generation: OnlineGeneration,
     identity: AccountIdentity,
     events: AccountEventPublisher,
+    friends: BTreeMap<u32, FriendEntry>,
 }
 
 impl OnlineRuntime {
@@ -51,6 +57,7 @@ impl OnlineRuntime {
             generation: OnlineGeneration::new(FIRST_GENERATION)?,
             identity,
             events,
+            friends: BTreeMap::new(),
         })
     }
 
@@ -141,16 +148,20 @@ impl OnlineRuntime {
 
     pub(crate) async fn run(
         &mut self,
-        qq: &mut AuthenticatedSession<TcpStream>,
-        profile: &LinuxNtProfile,
-        credential: &CredentialLogin,
-        uin: u64,
+        mut context: OnlineContext<'_>,
+        mut actions: AccountActionReceiver,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let key = crate::qq::session_key(credential)?;
-        let auth = crate::qq::authenticated(uin, credential, &key)?;
+        let key = crate::qq::session_key(context.credential)?;
+        let auth = crate::qq::authenticated(context.uin, context.credential, &key)?;
         loop {
             self.pushes
-                .drain(qq, &mut self.packets, profile, credential, uin)
+                .drain(
+                    context.qq,
+                    &mut self.packets,
+                    context.profile,
+                    context.credential,
+                    context.uin,
+                )
                 .await?;
             self.publish_pending_messages();
             let due_at = self
@@ -164,10 +175,15 @@ impl OnlineRuntime {
                     self.machine.stop();
                     return Ok(());
                 }
-                inbound = qq.read_push(&auth, |route| self.pushes.admits(route)) => {
+                inbound = context.qq.read_push(&auth, |route| self.pushes.admits(route)) => {
                     match inbound {
                         Ok(push) => self.pushes.handle(
-                            qq, &mut self.packets, profile, credential, uin, push
+                            context.qq,
+                            &mut self.packets,
+                            context.profile,
+                            context.credential,
+                            context.uin,
+                            push,
                         ).await?,
                         Err(error) if error.is_idle_timeout() => continue,
                         Err(error) => return Err(error.into()),
@@ -175,9 +191,27 @@ impl OnlineRuntime {
                     self.publish_pending_messages();
                     continue;
                 }
+                pending = actions.receive() => {
+                    let Some(pending) = pending else {
+                        return Err(io::Error::other("account action channel ended").into());
+                    };
+                    let result = execute_account_action(
+                        pending.request(),
+                        &self.identity,
+                        &self.packets,
+                        &self.pushes,
+                        &mut self.friends,
+                        &mut context,
+                    ).await;
+                    pending.complete(result);
+                    continue;
+                }
                 () = sleep(delay) => {}
             }
-            if let Err(error) = self.execute_due(qq, profile, credential, uin).await {
+            if let Err(error) = self
+                .execute_due(context.qq, context.profile, context.credential, context.uin)
+                .await
+            {
                 let _directive = self.machine.required_action_failed(self.generation);
                 return Err(error);
             }

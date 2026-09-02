@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 account-api = { version = "=0.0.0", path = "../../crates/account-api" }
 account-runtime = { version = "=0.0.0", path = "../../crates/account-runtime" }
+adapter-onebot = { version = "=0.0.0", path = "../../crates/adapter-onebot" }
 ceylith-client = { version = "=0.0.0", path = "../../crates/ceylith-client" }
 ceylith-crypto = { version = "=0.0.0", path = "../../crates/ceylith-crypto" }
 ceylith-protocol = { version = "=0.0.0", path = "../../crates/ceylith-protocol" }
@@ -20,6 +21,7 @@ local-state = { version = "=0.0.0", path = "../../crates/local-state" }
 notify-runtime = { version = "=0.0.0", path = "../../crates/notify-runtime" }
 qq-envelope = { version = "=0.0.0", path = "../../crates/qq-envelope" }
 qq-domain = { version = "=0.0.0", path = "../../crates/qq-domain" }
+qq-directory = { version = "=0.0.0", path = "../../crates/qq-directory" }
 qq-login = { version = "=0.0.0", path = "../../crates/qq-login" }
 qq-message = { version = "=0.0.0", path = "../../crates/qq-message" }
 qq-online = { version = "=0.0.0", path = "../../crates/qq-online" }
@@ -29,7 +31,7 @@ qq-transport = { version = "=0.0.0", path = "../../crates/qq-transport" }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 sha2 = "=0.10.9"
-tokio = { version = "=1.53.1", features = ["fs", "macros", "net", "rt-multi-thread", "signal", "time"] }
+tokio = { version = "=1.53.1", features = ["fs", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 zeroize = "=1.9.0"
 
 [dev-dependencies]

@@ -53,6 +53,7 @@ pub(super) fn legacy_environment() -> Result<ProcessConfig, io::Error> {
         )?,
         state_directory,
         accounts: vec![account],
+        onebot: None,
     })
 }
 

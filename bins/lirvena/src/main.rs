@@ -9,7 +9,11 @@ mod cli;
 mod config;
 mod notification;
 #[cfg(target_os = "linux")]
+mod onebot;
+#[cfg(target_os = "linux")]
 mod online;
+#[cfg(target_os = "linux")]
+mod opaque;
 #[cfg(target_os = "linux")]
 mod qq;
 #[cfg(target_os = "linux")]
