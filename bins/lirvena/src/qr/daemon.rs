@@ -143,12 +143,9 @@ fn start_community_telemetry(
     if ceylith.admission().grant_class() != GrantClass::Community {
         return None;
     }
-    let profile = match profiles.full.as_ref() {
-        Some(profile) => profile,
-        None => {
-            eprintln!("WARNING: Community telemetry has no negotiated Full Profile");
-            return None;
-        }
+    let Some(profile) = profiles.full.as_ref() else {
+        eprintln!("WARNING: Community telemetry has no negotiated Full Profile");
+        return None;
     };
     let setup = CommunityTelemetrySetup::new(
         config.state_directory.clone(),

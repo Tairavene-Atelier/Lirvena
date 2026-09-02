@@ -14,7 +14,7 @@ use tokio::time::{Duration, MissedTickBehavior};
 
 use crate::support::now_ms;
 
-const FLUSH_INTERVAL: Duration = Duration::from_secs(60);
+const FLUSH_INTERVAL: Duration = Duration::from_mins(1);
 const MAX_REPORTS_PER_FLUSH: usize = 8;
 
 pub(crate) struct CommunityTelemetryRuntime {
@@ -143,7 +143,7 @@ async fn run(
                     &mut store,
                     &mut active_accounts,
                     &mut group_counts,
-                    event,
+                    &event,
                 ),
                 Err(EventHubError::Lagged) => {
                     eprintln!("WARNING: Lirvena Community telemetry skipped lagged soft signals");
@@ -161,7 +161,7 @@ fn record_event(
     store: &mut CommunityTelemetryStore,
     active_accounts: &mut BTreeSet<AccountLocalId>,
     group_counts: &mut BTreeMap<AccountLocalId, u64>,
-    event: AccountEvent,
+    event: &AccountEvent,
 ) {
     let result = match event {
         AccountEvent::IdentityReady(_) => Ok(()),
@@ -169,26 +169,26 @@ fn record_event(
             .map_err(|_error| TelemetryStoreError::InvalidInput)
             .and_then(|time| store.record_received(time)),
         AccountEvent::OutboundMessageAccepted { occurred_at_ms, .. } => {
-            store.record_sent(occurred_at_ms)
+            store.record_sent(*occurred_at_ms)
         }
         AccountEvent::GroupCountObserved {
             local_id,
             count,
             occurred_at_ms,
         } => {
-            group_counts.insert(local_id, count);
+            group_counts.insert(*local_id, *count);
             group_counts
                 .values()
                 .try_fold(0_u64, |total, value| total.checked_add(*value))
                 .ok_or(TelemetryStoreError::InvalidInput)
-                .and_then(|total| store.observe_group_count(occurred_at_ms, total))
+                .and_then(|total| store.observe_group_count(*occurred_at_ms, total))
         }
         AccountEvent::Lifecycle {
             local_id,
             phase,
             occurred_at_ms,
             ..
-        } => record_lifecycle(store, active_accounts, local_id, phase, occurred_at_ms),
+        } => record_lifecycle(store, active_accounts, *local_id, *phase, *occurred_at_ms),
     };
     if result.is_err() {
         eprintln!("WARNING: Lirvena could not persist one Community telemetry soft signal");
