@@ -22,6 +22,8 @@ pub(super) async fn run(
     config: &ProcessConfig,
     ceylith: &InstallationClient,
     profile: &LinuxNtProfile,
+    account: &AccountHandle,
+    events: &AccountEventPublisher,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut login = LoginMachine::new();
     let _event = begin_qr_request(&mut login, now_ms()?)?;
@@ -101,8 +103,14 @@ pub(super) async fn run(
         credential.nickname(),
         credential.uid()
     );
+    let identity = AccountIdentity::new(
+        account.local_id(),
+        secrets.uin(),
+        credential.nickname().to_owned(),
+    )?;
+    let _delivered = events.publish(AccountEvent::IdentityReady(identity.clone()));
     let mut qq = AuthenticatedSession::new(qq);
-    let mut online = OnlineRuntime::new(profile, &device)?;
+    let mut online = OnlineRuntime::new(profile, &device, identity, events.clone())?;
     online
         .bootstrap(OnlineContext {
             ceylith,
@@ -114,6 +122,20 @@ pub(super) async fn run(
             account_slot_id,
         })
         .await?;
+    let occurred_at_ms = now_ms()?;
+    account
+        .transition(AccountTransition {
+            next: AccountPhase::Active,
+            protective_reason: None,
+            occurred_at_ms,
+        })
+        .await?;
+    let _delivered = events.publish(AccountEvent::Lifecycle {
+        local_id: account.local_id(),
+        phase: AccountPhase::Active,
+        protective_reason: None,
+        occurred_at_ms,
+    });
     let _previous = login.transition(LoginState::Online)?;
     eprintln!("Lirvena completed the required online startup gates");
     eprintln!("Lirvena QQ session is online; press Ctrl-C to stop.");
@@ -123,3 +145,5 @@ pub(super) async fn run(
     let _previous = login.transition(LoginState::Stopped)?;
     Ok(())
 }
+use account_api::{AccountEvent, AccountEventPublisher, AccountIdentity};
+use account_runtime::{AccountHandle, AccountPhase, AccountTransition};

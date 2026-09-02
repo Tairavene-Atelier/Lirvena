@@ -1,6 +1,7 @@
 use std::io;
 use std::time::Duration;
 
+use account_api::{AccountEvent, AccountEventPublisher, AccountIdentity, InboundMessage};
 use ceylith_client::InstallationClient;
 use ceylith_protocol::AccountSlotId;
 use qq_domain::{OnlineAction, OnlineDirective, OnlineGeneration, OnlineMachine, OnlineState};
@@ -32,18 +33,24 @@ pub(crate) struct OnlineRuntime {
     packets: PacketRuntime,
     pushes: PushRuntime,
     generation: OnlineGeneration,
+    identity: AccountIdentity,
+    events: AccountEventPublisher,
 }
 
 impl OnlineRuntime {
     pub(crate) fn new(
         profile: &LinuxNtProfile,
         device: &QrDevice,
+        identity: AccountIdentity,
+        events: AccountEventPublisher,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
             machine: OnlineMachine::new(decode_online_plan(profile)?),
             packets: PacketRuntime::new(profile, device)?,
             pushes: PushRuntime::new(profile)?,
             generation: OnlineGeneration::new(FIRST_GENERATION)?,
+            identity,
+            events,
         })
     }
 
@@ -128,6 +135,7 @@ impl OnlineRuntime {
                 context.uin,
             )
             .await?;
+        self.publish_pending_messages();
         Ok(())
     }
 
@@ -144,6 +152,7 @@ impl OnlineRuntime {
             self.pushes
                 .drain(qq, &mut self.packets, profile, credential, uin)
                 .await?;
+            self.publish_pending_messages();
             let due_at = self
                 .machine
                 .next_due_ms()
@@ -163,6 +172,7 @@ impl OnlineRuntime {
                         Err(error) if error.is_idle_timeout() => continue,
                         Err(error) => return Err(error.into()),
                     }
+                    self.publish_pending_messages();
                     continue;
                 }
                 () = sleep(delay) => {}
@@ -171,6 +181,24 @@ impl OnlineRuntime {
                 let _directive = self.machine.required_action_failed(self.generation);
                 return Err(error);
             }
+        }
+    }
+
+    fn publish_pending_messages(&mut self) {
+        while let Some(message) = self.pushes.pop_message() {
+            let segment_count = message.rich_text().map_or(0, |body| body.elements().len());
+            let (envelope, rich_text) = message.into_parts();
+            let message_class = envelope.class();
+            let event = AccountEvent::Message(Box::new(InboundMessage::new(
+                self.identity.clone(),
+                envelope,
+                rich_text,
+            )));
+            let _delivered = self.events.publish(event);
+            eprintln!(
+                "Lirvena received authenticated QQ {message_class:?} message with \
+                 {segment_count} decoded segments"
+            );
         }
     }
 

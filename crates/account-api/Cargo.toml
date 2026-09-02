@@ -1,0 +1,21 @@
+[package]
+name = "account-api"
+description = "Shared account command and event boundary for Lirvena adapters."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+account-runtime = { version = "=0.0.0", path = "../account-runtime" }
+qq-message = { version = "=0.0.0", path = "../qq-message" }
+tokio = { version = "=1.53.1", features = ["sync"] }
+
+[dev-dependencies]
+account-runtime = { version = "=0.0.0", path = "../account-runtime" }
+tokio = { version = "=1.53.1", features = ["macros", "rt"] }
+
+[lints]
+workspace = true

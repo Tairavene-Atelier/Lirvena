@@ -20,6 +20,8 @@ use crate::notification;
 use crate::support::now_ms;
 
 pub(super) async fn run(config: ProcessConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let account_events = AccountEventHub::new(1_024)?;
+    let event_publisher = account_events.publisher();
     let notification_center = notification::start(&config.state_directory).await?;
     let notification_handle = notification_center
         .as_ref()
@@ -72,8 +74,20 @@ pub(super) async fn run(config: ProcessConfig) -> Result<(), Box<dyn std::error:
             occurred_at_ms: now_ms()?,
         })
         .await?;
+    let _delivered = event_publisher.publish(AccountEvent::Lifecycle {
+        local_id: account_local_id,
+        phase: AccountPhase::Starting,
+        protective_reason: None,
+        occurred_at_ms: now_ms()?,
+    });
 
-    let mut login = Box::pin(flow::run(&config, &ceylith, &profile));
+    let mut login = Box::pin(flow::run(
+        &config,
+        &ceylith,
+        &profile,
+        &account,
+        &event_publisher,
+    ));
     let (result, protective_reason) = if let Some(watch_runtime) = watch_runtime.as_mut() {
         loop {
             tokio::select! {
@@ -116,6 +130,13 @@ pub(super) async fn run(config: ProcessConfig) -> Result<(), Box<dyn std::error:
     let mut cleanup_error: Option<Box<dyn std::error::Error>> = None;
     if let Err(error) = account.transition(terminal).await {
         cleanup_error = Some(error.into());
+    } else {
+        let _delivered = event_publisher.publish(AccountEvent::Lifecycle {
+            local_id: account_local_id,
+            phase: terminal.next,
+            protective_reason: terminal.protective_reason,
+            occurred_at_ms: terminal.occurred_at_ms,
+        });
     }
     if result.is_err()
         && let Some(reason) = protective_reason
@@ -181,3 +202,4 @@ const fn grant_availability(admission: &SessionAdmission) -> GrantAvailability {
         },
     }
 }
+use account_api::{AccountEvent, AccountEventHub};

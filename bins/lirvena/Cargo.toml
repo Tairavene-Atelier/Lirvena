@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+account-api = { version = "=0.0.0", path = "../../crates/account-api" }
 account-runtime = { version = "=0.0.0", path = "../../crates/account-runtime" }
 ceylith-client = { version = "=0.0.0", path = "../../crates/ceylith-client" }
 ceylith-crypto = { version = "=0.0.0", path = "../../crates/ceylith-crypto" }
@@ -19,6 +20,7 @@ notify-runtime = { version = "=0.0.0", path = "../../crates/notify-runtime" }
 qq-envelope = { version = "=0.0.0", path = "../../crates/qq-envelope" }
 qq-domain = { version = "=0.0.0", path = "../../crates/qq-domain" }
 qq-login = { version = "=0.0.0", path = "../../crates/qq-login" }
+qq-message = { version = "=0.0.0", path = "../../crates/qq-message" }
 qq-online = { version = "=0.0.0", path = "../../crates/qq-online" }
 qq-profile = { version = "=0.0.0", path = "../../crates/qq-profile" }
 qq-session = { version = "=0.0.0", path = "../../crates/qq-session" }
