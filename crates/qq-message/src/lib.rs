@@ -3,6 +3,7 @@
 mod decoder;
 mod error;
 mod model;
+mod notice;
 mod outbound;
 mod proto;
 mod rich_text;
@@ -10,6 +11,7 @@ mod rich_text;
 pub use decoder::{MessageDecoder, MessageDisposition};
 pub use error::MessageDecodeError;
 pub use model::{MessageClass, MessageEnvelope, MessagePayload, MessageRoute};
+pub use notice::{GroupNotice, MemberDecreaseKind, MemberIncreaseKind, decode_group_notice};
 pub use outbound::{
     OutboundSegment, SendMessageInput, SendTextInput, SendTextOutcome, SendTextTarget,
     encode_message, encode_text_message, parse_send_message_response,

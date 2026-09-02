@@ -3,7 +3,8 @@ use std::io;
 
 use qq_login::CredentialLogin;
 use qq_message::{
-    MessageDecoder, MessageDisposition, MessageEnvelope, RichTextMessage, decode_rich_text,
+    GroupNotice, MessageDecoder, MessageDisposition, MessageEnvelope, RichTextMessage,
+    decode_group_notice, decode_rich_text,
 };
 use qq_online::{PushOutcome, PushProcessor};
 use qq_profile::{LinuxNtProfile, PushPlan, decode_push_plan};
@@ -19,7 +20,7 @@ pub(super) struct PushRuntime {
     plan: PushPlan,
     processor: PushProcessor,
     decoder: MessageDecoder,
-    messages: VecDeque<DecodedMessage>,
+    events: VecDeque<DecodedPush>,
     queued_message_bytes: usize,
 }
 
@@ -28,6 +29,26 @@ pub(super) struct PushRuntime {
 pub(super) struct DecodedMessage {
     envelope: MessageEnvelope,
     rich_text: Option<RichTextMessage>,
+}
+
+/// One authenticated QQ event admitted by the current transport generation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum DecodedPush {
+    Message(DecodedMessage),
+    GroupNotice {
+        notice: GroupNotice,
+        occurred_at: u64,
+        encoded_len: usize,
+    },
+}
+
+impl DecodedPush {
+    fn encoded_len(&self) -> usize {
+        match self {
+            Self::Message(message) => encoded_message_len(message),
+            Self::GroupNotice { encoded_len, .. } => *encoded_len,
+        }
+    }
 }
 
 impl DecodedMessage {
@@ -50,7 +71,7 @@ impl PushRuntime {
             plan: decode_push_plan(profile)?,
             processor: PushProcessor::default(),
             decoder: MessageDecoder::default(),
-            messages: VecDeque::new(),
+            events: VecDeque::new(),
             queued_message_bytes: 0,
         })
     }
@@ -63,12 +84,12 @@ impl PushRuntime {
         self.plan.find(route).is_some()
     }
 
-    pub(super) fn pop_message(&mut self) -> Option<DecodedMessage> {
-        let message = self.messages.pop_front()?;
+    pub(super) fn pop_event(&mut self) -> Option<DecodedPush> {
+        let event = self.events.pop_front()?;
         self.queued_message_bytes = self
             .queued_message_bytes
-            .saturating_sub(encoded_message_len(&message));
-        Some(message)
+            .saturating_sub(event.encoded_len());
+        Some(event)
     }
 
     pub(super) async fn drain(
@@ -99,7 +120,7 @@ impl PushRuntime {
             .plan
             .find(push.command())
             .ok_or_else(|| io::Error::other("authenticated QQ Push route is not admitted"))?;
-        let available_message_slots = MAX_QUEUED_MESSAGES.saturating_sub(self.messages.len());
+        let available_message_slots = MAX_QUEUED_MESSAGES.saturating_sub(self.events.len());
         let available_message_bytes =
             MAX_QUEUED_MESSAGE_BYTES.saturating_sub(self.queued_message_bytes);
         match self.processor.apply(
@@ -149,6 +170,19 @@ impl PushRuntime {
         let MessageDisposition::New(envelope) = disposition else {
             return Ok(());
         };
+        let encoded_len = encoded_envelope_len(&envelope);
+        if let Some(notice) = decode_group_notice(&envelope)? {
+            self.queued_message_bytes = self
+                .queued_message_bytes
+                .checked_add(encoded_len)
+                .ok_or_else(|| io::Error::other("message queue byte count overflow"))?;
+            self.events.push_back(DecodedPush::GroupNotice {
+                notice,
+                occurred_at: u64::try_from(envelope.timestamp()).unwrap_or_default(),
+                encoded_len,
+            });
+            return Ok(());
+        }
         let rich_text = envelope
             .payload()
             .rich_text()
@@ -162,13 +196,17 @@ impl PushRuntime {
             .queued_message_bytes
             .checked_add(encoded_message_len(&message))
             .ok_or_else(|| io::Error::other("message queue byte count overflow"))?;
-        self.messages.push_back(message);
+        self.events.push_back(DecodedPush::Message(message));
         Ok(())
     }
 }
 
 fn encoded_message_len(message: &DecodedMessage) -> usize {
-    let payload = message.envelope().payload();
+    encoded_envelope_len(message.envelope())
+}
+
+fn encoded_envelope_len(envelope: &MessageEnvelope) -> usize {
+    let payload = envelope.payload();
     payload.rich_text().map_or(0, <[u8]>::len)
         + payload.content().map_or(0, <[u8]>::len)
         + payload.encrypted_content().map_or(0, <[u8]>::len)

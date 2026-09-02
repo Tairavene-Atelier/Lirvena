@@ -1,6 +1,6 @@
-use account_api::{AccountEvent, InboundMessage};
+use account_api::{AccountEvent, InboundMessage, ResolvedGroupNotice, ResolvedGroupNoticeKind};
 use account_runtime::AccountPhase;
-use qq_message::{MentionTarget, MessageClass, Segment};
+use qq_message::{MemberDecreaseKind, MemberIncreaseKind, MentionTarget, MessageClass, Segment};
 use serde_json::{Map, Value, json};
 
 use crate::IdFormat;
@@ -47,10 +47,59 @@ pub fn project_account_event(
             "sub_type": lifecycle_subtype(*phase)
         }))),
         AccountEvent::Message(message) => project_message(message, id_format).map(Some),
+        AccountEvent::GroupNotice(notice) => project_group_notice(notice, id_format).map(Some),
         AccountEvent::OutboundMessageAccepted { .. } | AccountEvent::GroupCountObserved { .. } => {
             Ok(None)
         }
     }
+}
+
+fn project_group_notice(
+    notice: &ResolvedGroupNotice,
+    id_format: IdFormat,
+) -> Result<Value, EventProjectionError> {
+    let (notice_type, sub_type) = match notice.kind() {
+        ResolvedGroupNoticeKind::AdministratorSet => ("group_admin", "set"),
+        ResolvedGroupNoticeKind::AdministratorUnset => ("group_admin", "unset"),
+        ResolvedGroupNoticeKind::MemberIncrease(MemberIncreaseKind::Approve) => {
+            ("group_increase", "approve")
+        }
+        ResolvedGroupNoticeKind::MemberIncrease(MemberIncreaseKind::Invite) => {
+            ("group_increase", "invite")
+        }
+        ResolvedGroupNoticeKind::MemberDecrease(MemberDecreaseKind::KickMe) => {
+            ("group_decrease", "kick_me")
+        }
+        ResolvedGroupNoticeKind::MemberDecrease(MemberDecreaseKind::Disband) => {
+            ("group_decrease", "disband")
+        }
+        ResolvedGroupNoticeKind::MemberDecrease(MemberDecreaseKind::Leave) => {
+            ("group_decrease", "leave")
+        }
+        ResolvedGroupNoticeKind::MemberDecrease(MemberDecreaseKind::Kick) => {
+            ("group_decrease", "kick")
+        }
+        ResolvedGroupNoticeKind::MemberIncrease(MemberIncreaseKind::Unknown(_))
+        | ResolvedGroupNoticeKind::MemberDecrease(MemberDecreaseKind::Unknown(_)) => {
+            return Err(EventProjectionError);
+        }
+    };
+    let mut object = Map::from_iter([
+        ("time".to_owned(), json!(notice.occurred_at())),
+        (
+            "self_id".to_owned(),
+            id_format.value(notice.account().qq_id()),
+        ),
+        ("post_type".to_owned(), json!("notice")),
+        ("notice_type".to_owned(), json!(notice_type)),
+        ("sub_type".to_owned(), json!(sub_type)),
+        ("group_id".to_owned(), id_format.value(notice.group_id())),
+        ("user_id".to_owned(), id_format.value(notice.user_id())),
+    ]);
+    if let Some(operator_id) = notice.operator_id() {
+        object.insert("operator_id".to_owned(), id_format.value(operator_id));
+    }
+    Ok(Value::Object(object))
 }
 
 fn project_message(

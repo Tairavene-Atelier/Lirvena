@@ -3,6 +3,7 @@
 
 mod action;
 mod event;
+mod group;
 mod hub;
 
 pub use action::{
@@ -10,4 +11,5 @@ pub use action::{
     PendingAccountAction, account_action_channel,
 };
 pub use event::{AccountEvent, AccountIdentity, InboundMessage};
+pub use group::{ResolvedGroupNotice, ResolvedGroupNoticeKind};
 pub use hub::{AccountEventHub, AccountEventPublisher, AccountEventSubscription, EventHubError};
