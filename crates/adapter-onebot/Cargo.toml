@@ -14,7 +14,7 @@ account-runtime = { version = "=0.0.0", path = "../account-runtime" }
 async-stream = "=0.3.6"
 axum = { version = "=0.8.9", features = ["http1", "json", "tokio", "ws"] }
 futures-util = "=0.3.33"
-hmac = "=0.12.1"
+hmac = "=0.13.0"
 qq-message = { version = "=0.0.0", path = "../qq-message" }
 reqwest = { version = "=0.13.4", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "=0.23.43", default-features = false, features = ["ring", "std"] }
