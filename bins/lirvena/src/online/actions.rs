@@ -296,7 +296,6 @@ fn compile_segment(
                 display: format!("@{name}"),
             })
         }
-        "at" => Err(AccountActionError::Unsupported),
         _ => Err(AccountActionError::Unsupported),
     }
 }

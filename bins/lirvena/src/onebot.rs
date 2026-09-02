@@ -110,28 +110,43 @@ pub(super) async fn start(
         });
     }
     tasks.spawn(coordinate(
-        events,
-        actions,
-        dispatcher,
-        event_bus,
-        reporters,
-        config.id_format,
-        config.heartbeat_interval,
+        EventCoordinator {
+            events,
+            actions,
+            dispatcher,
+            event_bus,
+            reporters,
+            id_format: config.id_format,
+            heartbeat_interval: config.heartbeat_interval,
+        },
         receiver,
     ));
     Ok(Some(OneBotRuntime { shutdown, tasks }))
 }
 
-async fn coordinate(
-    mut events: AccountEventSubscription,
+struct EventCoordinator {
+    events: AccountEventSubscription,
     actions: BTreeMap<AccountLocalId, AccountActionHandle>,
     dispatcher: Arc<OneBotDispatcher>,
     event_bus: Arc<OneBotEventBus>,
     reporters: Vec<HttpEventReporter>,
     id_format: IdFormat,
     heartbeat_interval: std::time::Duration,
+}
+
+async fn coordinate(
+    coordinator: EventCoordinator,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), io::Error> {
+    let EventCoordinator {
+        mut events,
+        actions,
+        dispatcher,
+        event_bus,
+        reporters,
+        id_format,
+        heartbeat_interval,
+    } = coordinator;
     let mut identities = BTreeMap::<AccountLocalId, u64>::new();
     let mut heartbeat = tokio::time::interval(heartbeat_interval);
     heartbeat.set_missed_tick_behavior(MissedTickBehavior::Skip);
