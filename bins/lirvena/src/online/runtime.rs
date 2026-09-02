@@ -5,6 +5,7 @@ use std::time::Duration;
 use account_api::{
     AccountActionReceiver, AccountEvent, AccountEventPublisher, AccountIdentity, InboundMessage,
 };
+use account_runtime::AssignedRealm;
 use ceylith_client::InstallationClient;
 use ceylith_protocol::AccountSlotId;
 use qq_directory::FriendEntry;
@@ -27,6 +28,7 @@ pub(crate) struct OnlineContext<'a> {
     pub ceylith: &'a InstallationClient,
     pub qq: &'a mut AuthenticatedSession<TcpStream>,
     pub profile: &'a LinuxNtProfile,
+    pub realm: AssignedRealm,
     pub device: &'a QrDevice,
     pub credential: &'a CredentialLogin,
     pub uin: u64,
@@ -92,17 +94,19 @@ impl OnlineRuntime {
             self.generation,
             ActionClass::SecurityBootstrap,
         )?;
-        action_runtime::run(BootstrapContext {
-            ceylith: context.ceylith,
-            qq: context.qq,
-            push_plan: self.pushes.plan(),
-            profile: context.profile,
-            device: context.device,
-            credential: context.credential,
-            uin: context.uin,
-            account_slot_id: context.account_slot_id,
-        })
-        .await?;
+        if requires_full_bootstrap(context.realm) {
+            action_runtime::run(BootstrapContext {
+                ceylith: context.ceylith,
+                qq: context.qq,
+                push_plan: self.pushes.plan(),
+                profile: context.profile,
+                device: context.device,
+                credential: context.credential,
+                uin: context.uin,
+                account_slot_id: context.account_slot_id,
+            })
+            .await?;
+        }
         match self
             .machine
             .security_bootstrap_succeeded(self.generation, now_ms()?)?
@@ -296,6 +300,22 @@ impl OnlineRuntime {
             }
         }
         Ok(())
+    }
+}
+
+const fn requires_full_bootstrap(realm: AssignedRealm) -> bool {
+    matches!(realm, AssignedRealm::Full)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::requires_full_bootstrap;
+    use account_runtime::AssignedRealm;
+
+    #[test]
+    fn public_never_enters_the_full_action_flow() {
+        assert!(!requires_full_bootstrap(AssignedRealm::Public));
+        assert!(requires_full_bootstrap(AssignedRealm::Full));
     }
 }
 

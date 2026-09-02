@@ -120,6 +120,7 @@ pub(super) async fn run(config: ProcessConfig) -> Result<(), Box<dyn std::error:
             config: account_config.clone(),
             ceylith: ceylith.clone(),
             profile,
+            realm,
             account: handle,
             events: event_publisher.clone(),
             notifications: notification_handle.clone(),
@@ -209,6 +210,7 @@ struct AccountTaskContext {
     config: AccountConfig,
     ceylith: InstallationClient,
     profile: LinuxNtProfile,
+    realm: AssignedRealm,
     account: account_runtime::AccountHandle,
     events: AccountEventPublisher,
     notifications: Option<NotificationHandle>,
@@ -222,6 +224,7 @@ async fn run_account(context: AccountTaskContext) -> AccountCompletion {
         config,
         ceylith,
         profile,
+        realm,
         account,
         events,
         notifications,
@@ -231,7 +234,7 @@ async fn run_account(context: AccountTaskContext) -> AccountCompletion {
     } = context;
     let local_id = account.local_id();
     let outcome = tokio::select! {
-        result = flow::run(&config, &ceylith, &profile, &account, &events, actions) => {
+        result = flow::run(&config, &ceylith, &profile, realm, &account, &events, actions) => {
             result.map_err(|error| io::Error::other(error.to_string()))
         }
         directive = wait_for_stop(&mut stop) => match directive {

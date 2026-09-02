@@ -1,5 +1,5 @@
 use account_api::{AccountActionReceiver, AccountEvent, AccountEventPublisher, AccountIdentity};
-use account_runtime::{AccountHandle, AccountPhase, AccountTransition};
+use account_runtime::{AccountHandle, AccountPhase, AccountTransition, AssignedRealm};
 use ceylith_client::InstallationClient;
 use ceylith_protocol::AccountSlotId;
 use qq_domain::{LoginMachine, LoginState};
@@ -24,6 +24,7 @@ pub(super) async fn run(
     config: &AccountConfig,
     ceylith: &InstallationClient,
     profile: &LinuxNtProfile,
+    realm: AssignedRealm,
     account: &AccountHandle,
     events: &AccountEventPublisher,
     actions: AccountActionReceiver,
@@ -80,6 +81,7 @@ pub(super) async fn run(
         &mut qq,
         QrPolling {
             profile,
+            realm,
             device: &device,
             random_key: &random_key,
             key_agreement: &key_agreement,
@@ -148,6 +150,7 @@ pub(super) async fn run(
                 ceylith,
                 qq: &mut qq,
                 profile,
+                realm,
                 device: &device,
                 credential: &credential,
                 uin: secrets.uin(),
