@@ -1,0 +1,31 @@
+{
+  "ceylith": {
+    "address": "127.0.0.1:52194",
+    "noise_public_key_path": "secrets/ceylith-noise.pub",
+    "profile_verifying_key_path": "secrets/ceylith-profile.pub",
+    "token_path": "secrets/token"
+  },
+  "installation": {
+    "id_path": "secrets/installation.id",
+    "signing_key_path": "secrets/installation-signing.key",
+    "noise_key_path": "secrets/installation-noise.key",
+    "state_directory": ".lirvena-state"
+  },
+  "profile": {
+    "id_path": "secrets/profile.id"
+  },
+  "accounts": [
+    {
+      "slot_id_path": "secrets/account-primary.id",
+      "mode": "require_grant",
+      "device_path": "accounts/primary/device.json",
+      "qr_output_path": "accounts/primary/login-qr.png"
+    },
+    {
+      "slot_id_path": "secrets/account-public.id",
+      "mode": "public",
+      "device_path": "accounts/public/device.json",
+      "qr_output_path": "accounts/public/login-qr.png"
+    }
+  ]
+}

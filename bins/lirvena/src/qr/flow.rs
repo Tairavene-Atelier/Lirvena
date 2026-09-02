@@ -14,12 +14,12 @@ use super::ceylith::{OpaqueOperation, profile_peer};
 use super::credential::exchange;
 use super::polling::{QrPolling, until_confirmed};
 use super::qq::execute_request;
-use crate::config::ProcessConfig;
+use crate::config::AccountConfig;
 use crate::online::{OnlineContext, OnlineRuntime};
 use crate::support::{encode_hex, now_ms, now_seconds, random_array, random_nonzero_u32};
 
 pub(super) async fn run(
-    config: &ProcessConfig,
+    config: &AccountConfig,
     ceylith: &InstallationClient,
     profile: &LinuxNtProfile,
     account: &AccountHandle,

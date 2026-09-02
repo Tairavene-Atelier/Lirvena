@@ -1,5 +1,6 @@
 /target/
 /device.json
+/lirvena.json
 /fuzz/target/
 **/*.cdx.json
 __pycache__/

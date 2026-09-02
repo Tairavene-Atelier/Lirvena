@@ -41,7 +41,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(target_os = "linux")]
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    if std::env::var_os("LIRVENA_CEYLITH_ADDRESS").is_some() {
+    if std::env::var_os("LIRVENA_CONFIG_PATH").is_some()
+        || std::env::var_os("LIRVENA_CEYLITH_ADDRESS").is_some()
+    {
         qr::run(config::ProcessConfig::from_environment()?).await
     } else {
         println!("Lirvena {}", env!("CARGO_PKG_VERSION"));
