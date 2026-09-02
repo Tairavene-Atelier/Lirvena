@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock};
 use tokio::sync::{Mutex, mpsc};
 
 use crate::quick::expand_quick_operation;
-use crate::{ActionMode, ActionRequest, ActionResponse, BackendError, OneBotBackend};
+use crate::{ActionMode, ActionRequest, ActionResponse, BackendError, IdFormat, OneBotBackend};
 
 const MAX_QUEUE_CAPACITY: usize = 4_096;
 
@@ -15,6 +15,8 @@ pub struct DispatcherConfig {
     pub bound_self_id: Option<u64>,
     /// Bounded asynchronous action capacity.
     pub queue_capacity: usize,
+    /// Identifier representation applied to action response data.
+    pub id_format: IdFormat,
 }
 
 /// Shared `OneBot` action router for every transport.
@@ -23,6 +25,7 @@ pub struct OneBotDispatcher {
     bound_self_id: Option<u64>,
     asynchronous: mpsc::Sender<QueuedAction>,
     rate_limited: Arc<Mutex<()>>,
+    id_format: IdFormat,
 }
 
 struct QueuedAction {
@@ -94,6 +97,7 @@ impl OneBotDispatcher {
             bound_self_id: config.bound_self_id,
             asynchronous: sender,
             rate_limited: Arc::new(Mutex::new(())),
+            id_format: config.id_format,
         }
     }
 
@@ -171,7 +175,10 @@ impl OneBotDispatcher {
         };
         match request.mode() {
             ActionMode::Synchronous => match backend.call(request.into_backend()).await {
-                Ok(data) => ActionResponse::success(data, echo),
+                Ok(mut data) => {
+                    self.id_format.project_data(&mut data);
+                    ActionResponse::success(data, echo)
+                }
                 Err(error) => ActionResponse::backend_failure(echo, &error),
             },
             ActionMode::Asynchronous => {
@@ -187,7 +194,10 @@ impl OneBotDispatcher {
             ActionMode::RateLimited => {
                 let _guard = self.rate_limited.lock().await;
                 match backend.call(request.into_backend()).await {
-                    Ok(data) => ActionResponse::success(data, echo),
+                    Ok(mut data) => {
+                        self.id_format.project_data(&mut data);
+                        ActionResponse::success(data, echo)
+                    }
                     Err(error) => ActionResponse::backend_failure(echo, &error),
                 }
             }

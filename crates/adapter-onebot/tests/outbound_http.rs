@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use adapter_onebot::{
     ActionRequest, BackendCall, BackendError, DispatcherConfig, HttpEventReporter,
-    HttpEventReporterConfig, OneBotBackend, OneBotDispatcher,
+    HttpEventReporterConfig, IdFormat, OneBotBackend, OneBotDispatcher,
 };
 use axum::Router;
 use axum::body::Bytes;
@@ -77,6 +77,7 @@ async fn reporter_signs_identity_and_routes_quick_operation()
         DispatcherConfig {
             bound_self_id: None,
             queue_capacity: 8,
+            id_format: IdFormat::String,
         },
     )?;
     let reporter = HttpEventReporter::new(HttpEventReporterConfig {

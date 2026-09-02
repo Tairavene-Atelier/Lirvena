@@ -16,6 +16,8 @@
   },
   "onebot": {
     "event_queue_capacity": 1024,
+    "id_format": "string",
+    "heartbeat_milliseconds": 15000,
     "forward": {
       "listen": "127.0.0.1:5700",
       "access_token_path": "secrets/onebot-token",

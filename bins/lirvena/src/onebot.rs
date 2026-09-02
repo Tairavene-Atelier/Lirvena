@@ -11,6 +11,7 @@ use adapter_onebot::{
 use serde_json::Value;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
+use tokio::time::MissedTickBehavior;
 
 use crate::config::OneBotConfig;
 
@@ -52,6 +53,7 @@ pub(super) async fn start(
         OneBotDispatcher::empty(DispatcherConfig {
             bound_self_id: None,
             queue_capacity: ACTION_QUEUE_CAPACITY,
+            id_format: config.id_format,
         })
         .map_err(|error| io::Error::other(error.to_string()))?,
     );
@@ -108,7 +110,14 @@ pub(super) async fn start(
         });
     }
     tasks.spawn(coordinate(
-        events, actions, dispatcher, event_bus, reporters, receiver,
+        events,
+        actions,
+        dispatcher,
+        event_bus,
+        reporters,
+        config.id_format,
+        config.heartbeat_interval,
+        receiver,
     ));
     Ok(Some(OneBotRuntime { shutdown, tasks }))
 }
@@ -119,9 +128,14 @@ async fn coordinate(
     dispatcher: Arc<OneBotDispatcher>,
     event_bus: Arc<OneBotEventBus>,
     reporters: Vec<HttpEventReporter>,
+    id_format: IdFormat,
+    heartbeat_interval: std::time::Duration,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), io::Error> {
     let mut identities = BTreeMap::<AccountLocalId, u64>::new();
+    let mut heartbeat = tokio::time::interval(heartbeat_interval);
+    heartbeat.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    heartbeat.tick().await;
     loop {
         tokio::select! {
             event = events.receive() => {
@@ -135,8 +149,8 @@ async fn coordinate(
                     ).map_err(|error| io::Error::other(error.to_string()))?;
                     identities.insert(identity.local_id(), identity.qq_id());
                 }
-                if let Ok(Some(mut projected)) = project_account_event(&event, IdFormat::String) {
-                    attach_lifecycle_identity(&event, &identities, &mut projected);
+                if let Ok(Some(mut projected)) = project_account_event(&event, id_format) {
+                    attach_lifecycle_identity(&event, &identities, id_format, &mut projected);
                     for reporter in &reporters {
                         let _result = reporter.report_and_handle(&projected, &dispatcher).await;
                     }
@@ -149,6 +163,15 @@ async fn coordinate(
                     let _removed = dispatcher.unregister(self_id);
                 }
             }
+            _ = heartbeat.tick() => {
+                for self_id in identities.values() {
+                    let event = heartbeat_event(*self_id, id_format, heartbeat_interval)?;
+                    for reporter in &reporters {
+                        let _result = reporter.report_and_handle(&event, &dispatcher).await;
+                    }
+                    let _delivered = event_bus.publish(event);
+                }
+            }
             changed = shutdown.changed() => {
                 if changed.is_err() || *shutdown.borrow() {
                     return Ok(());
@@ -158,9 +181,31 @@ async fn coordinate(
     }
 }
 
+fn heartbeat_event(
+    self_id: u64,
+    id_format: IdFormat,
+    interval: std::time::Duration,
+) -> Result<Value, io::Error> {
+    let interval = u64::try_from(interval.as_millis())
+        .map_err(|_error| io::Error::other("OneBot heartbeat interval overflow"))?;
+    let self_id = match id_format {
+        IdFormat::String => Value::String(self_id.to_string()),
+        IdFormat::Number => serde_json::json!(self_id),
+    };
+    Ok(serde_json::json!({
+        "time": crate::support::now_seconds()?,
+        "self_id": self_id,
+        "post_type": "meta_event",
+        "meta_event_type": "heartbeat",
+        "status": {"online": true, "good": true},
+        "interval": interval,
+    }))
+}
+
 fn attach_lifecycle_identity(
     event: &AccountEvent,
     identities: &BTreeMap<AccountLocalId, u64>,
+    id_format: IdFormat,
     projected: &mut Value,
 ) {
     let AccountEvent::Lifecycle { local_id, .. } = event else {
@@ -170,7 +215,11 @@ fn attach_lifecycle_identity(
         return;
     };
     if let Some(object) = projected.as_object_mut() {
-        object.insert("self_id".to_owned(), Value::String(self_id.to_string()));
+        let value = match id_format {
+            IdFormat::String => Value::String(self_id.to_string()),
+            IdFormat::Number => serde_json::json!(self_id),
+        };
+        object.insert("self_id".to_owned(), value);
     }
 }
 

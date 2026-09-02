@@ -4,8 +4,8 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
 use adapter_onebot::{
-    ActionRequest, BackendCall, BackendError, DispatcherConfig, ForwardServerConfig, OneBotBackend,
-    OneBotDispatcher, OneBotEventBus, OneBotForwardServer,
+    ActionRequest, BackendCall, BackendError, DispatcherConfig, ForwardServerConfig, IdFormat,
+    OneBotBackend, OneBotDispatcher, OneBotEventBus, OneBotForwardServer,
 };
 use serde_json::{Value, json};
 use tokio::sync::oneshot;
@@ -29,6 +29,7 @@ async fn start(
         DispatcherConfig {
             bound_self_id: None,
             queue_capacity: 8,
+            id_format: IdFormat::String,
         },
     )?);
     let server = OneBotForwardServer::bind(

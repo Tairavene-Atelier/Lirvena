@@ -3,7 +3,8 @@
 use std::sync::Arc;
 
 use adapter_onebot::{
-    ActionRequest, BackendCall, BackendError, DispatcherConfig, OneBotBackend, OneBotDispatcher,
+    ActionRequest, BackendCall, BackendError, DispatcherConfig, IdFormat, OneBotBackend,
+    OneBotDispatcher,
 };
 use serde_json::{Value, json};
 
@@ -14,11 +15,26 @@ impl OneBotBackend for EchoBackend {
         Box::pin(async move {
             if request.action() == "extension.anything" {
                 Ok(json!({"routed": request.action()}))
+            } else if request.action() == "get_friend_list" {
+                Ok(json!([{"user_id": 42, "nested": {"group_id": "7"}, "file_id": "9"}]))
             } else {
                 Err(BackendError::ActionNotFound)
             }
         })
     }
+}
+
+#[tokio::test]
+async fn configured_id_format_projects_nested_standard_identifiers() -> Result<(), BackendError> {
+    let request = ActionRequest::from_json(json!({"action": "get_friend_list"}))
+        .map_err(|_| BackendError::Failed("request rejected".to_owned()))?;
+    let response = dispatcher(&[10001])?.dispatch(request).await;
+    let encoded =
+        serde_json::to_value(response).map_err(|error| BackendError::Failed(error.to_string()))?;
+    assert_eq!(encoded["data"][0]["user_id"], json!("42"));
+    assert_eq!(encoded["data"][0]["nested"]["group_id"], json!("7"));
+    assert_eq!(encoded["data"][0]["file_id"], json!("9"));
+    Ok(())
 }
 
 fn dispatcher(accounts: &[u64]) -> Result<OneBotDispatcher, BackendError> {
@@ -29,6 +45,7 @@ fn dispatcher(accounts: &[u64]) -> Result<OneBotDispatcher, BackendError> {
         DispatcherConfig {
             bound_self_id: None,
             queue_capacity: 4,
+            id_format: IdFormat::String,
         },
     )
 }

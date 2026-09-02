@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use adapter_onebot::{HttpEventReporterConfig, ReverseWebSocketConfig};
+use adapter_onebot::{HttpEventReporterConfig, IdFormat, ReverseWebSocketConfig};
 use serde::Deserialize;
 use zeroize::Zeroizing;
 
@@ -21,6 +21,8 @@ pub(crate) struct OneBotConfig {
     pub(crate) event_queue_capacity: usize,
     pub(crate) http_post: Vec<HttpEventReporterConfig>,
     pub(crate) reverse_websocket: Vec<ReverseWebSocketConfig>,
+    pub(crate) id_format: IdFormat,
+    pub(crate) heartbeat_interval: Duration,
 }
 
 #[derive(Deserialize)]
@@ -33,6 +35,10 @@ pub(super) struct OneBotSection {
     http_post: Vec<HttpPostSection>,
     #[serde(default)]
     reverse_websocket: Vec<ReverseWebSocketSection>,
+    #[serde(default)]
+    id_format: IdFormat,
+    #[serde(default = "default_heartbeat_milliseconds")]
+    heartbeat_milliseconds: u64,
 }
 
 #[derive(Deserialize)]
@@ -69,6 +75,8 @@ impl OneBotSection {
             || self.event_queue_capacity > 4_096
             || self.forward.max_body_bytes == 0
             || self.forward.max_body_bytes > 4 * 1_048_576
+            || self.heartbeat_milliseconds < 1_000
+            || self.heartbeat_milliseconds > 300_000
         {
             return Err(invalid_config("onebot bounds"));
         }
@@ -101,6 +109,8 @@ impl OneBotSection {
             event_queue_capacity: self.event_queue_capacity,
             http_post,
             reverse_websocket,
+            id_format: self.id_format,
+            heartbeat_interval: Duration::from_millis(self.heartbeat_milliseconds),
         })
     }
 }
@@ -166,4 +176,8 @@ const fn default_http_timeout_seconds() -> u64 {
 
 const fn default_reconnect_milliseconds() -> u64 {
     5_000
+}
+
+const fn default_heartbeat_milliseconds() -> u64 {
+    15_000
 }
