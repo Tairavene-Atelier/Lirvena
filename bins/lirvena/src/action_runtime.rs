@@ -113,9 +113,11 @@ async fn execute_action(
     auth: &qq_envelope::SessionAuth<'_>,
     action: &ActionDirective,
 ) -> ObservedAction {
-    let prepared = prepare_action(profile, device, credential, auth, action);
-    let Ok(prepared) = prepared else {
-        return observed(ActionObservationKind::LocalEncodeFailure, Vec::new());
+    let prepared = match prepare_action(profile, device, credential, auth, action) {
+        Ok(prepared) => prepared,
+        Err(_error) => {
+            return observed(ActionObservationKind::LocalEncodeFailure, Vec::new());
+        }
     };
     if action.delay_ms() != 0 {
         sleep(Duration::from_millis(u64::from(action.delay_ms()))).await;

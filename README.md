@@ -9,11 +9,10 @@ Profile，并通过真实 QQ 网络获取和轮询登录二维码；二维码可
 调度的 Heartbeat/延迟同步已经实现，但尚待真实扫码验收。登录后的 QQ 连接使用单读者会话，
 能够把异步 Push 与请求响应分流，并按签名 Profile 选择已编译的回显、配置回包、字段回包、
 有界旧视频通知回包、InfoSync 状态投影、观察和保护性下线原语。Profile 绑定的私有运行材料由
-Ceylith 持有；Lirvena 不接受用户提供的 Profile 或动作材料文件。完整消息 Push 解码、OneBot
-和生产部署尚未完成；当前已能有界解码消息外层、路由元数据、去重身份及富文本中的文字、@、表情
-和现代图片、视频、语音元数据，并将兼容图片、视频字段投影到同一媒体模型，
-其他 element 会保留原始编码并显式标记为未支持，但消息仍尚未接入账号事件流，
-因此当前版本不能声称已经登录或稳定在线。
+Ceylith 持有；Lirvena 不接受用户提供的 Profile 或动作材料文件。消息 Push 已接入共享账号事件流，
+能够有界解码消息外层、路由元数据、去重身份及富文本中的文字、@、表情和现代图片、视频、语音
+元数据，并将兼容图片、视频字段投影到同一媒体模型。其他 element 会保留原始编码并显式标记为
+未支持。完整 OneBot 和生产部署尚未完成，因此当前版本仍不能声称已经登录或稳定在线。
 
 账号授权模式固定为 `public`、`require_grant` 和 `allow_public_fallback`。缺少授权时，
 `require_grant` 拒绝启动，`allow_public_fallback` 仅能在启动阶段发出强警告后进入 Public；
@@ -22,8 +21,15 @@ Installation 级 Ceylith 操作连接所有者和有界请求队列；Full 模�
 连接接收续签、额度、策略与撤权事件，避免长轮询阻塞签名请求。Watch 断链或撤权会先关闭
 当前 QQ 流，再把账号状态持久化为保护性下线。额度超限不会替用户挑选降级账号。
 
-账号状态默认存入当前目录的 `.lirvena-state`，也可通过 `LIRVENA_STATE_DIRECTORY` 指定。
-每个账号使用独立 SQLite WAL；Linux 上已有目录必须仅对当前用户可访问。
+推荐把安装和账号配置写入 `lirvena.json`，通过 `LIRVENA_CONFIG_PATH` 指向它；相对路径以该配置
+文件所在目录为基准。配置按 `ceylith`、`installation`、`profile` 和 `accounts` 分区，每个账号分别
+指定本地 slot 标识文件、授权模式、设备画像与二维码输出路径，示例见
+[`lirvena.example.json`](lirvena.example.json)。旧的单账号环境变量配置暂时兼容。
+
+账号状态默认存入当前目录的 `.lirvena-state`，文件配置可通过
+`installation.state_directory` 指定，旧配置也可使用 `LIRVENA_STATE_DIRECTORY`。每个账号使用
+独立 SQLite WAL 和独立 QQ transport；所有账号共享 Installation 级 Ceylith 操作连接与 Full
+Watch。Linux 上已有状态目录必须仅对当前用户可访问。
 
 用户可编辑的合成设备画像默认保存在当前目录的 `device.json`，也可通过
 `LIRVENA_DEVICE_CONFIG_PATH` 指定。缺少文件时 Lirvena 会原子生成一次并稳定复用；用户可修改

@@ -1,6 +1,5 @@
 use std::io;
 
-use account_runtime::AccountGrantMode;
 use ceylith_client::{
     AccessToken, Architecture, CeylithTcpClient, InstallationClient, InstallationClientRuntime,
     InstallationIdentity, OpaqueExchangeContext, Platform, ProfileVerifier, RequestedAccess,
@@ -63,7 +62,6 @@ pub(super) async fn connect(
     let token = config
         .token
         .as_ref()
-        .filter(|_value| config.account_mode != AccountGrantMode::Public)
         .map(|value| AccessToken::new(value.to_vec()))
         .transpose()?;
     let connection = CeylithTcpClient::connect(
