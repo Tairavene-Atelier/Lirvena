@@ -16,6 +16,7 @@ members = [
     "crates/qq-directory",
     "crates/qq-control",
     "crates/qq-envelope",
+    "crates/qq-highway",
     "crates/qq-login",
     "crates/qq-media",
     "crates/qq-message",

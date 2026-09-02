@@ -1,0 +1,20 @@
+[package]
+name = "qq-highway"
+description = "Bounded QQ Highway transport primitives for Lirvena."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+md-5 = "=0.10.6"
+prost = "=0.14.4"
+reqwest = { version = "=0.13.4", default-features = false, features = ["rustls-no-provider"] }
+
+[dev-dependencies]
+tokio = { version = "=1.53.1", features = ["io-util", "macros", "net", "rt"] }
+
+[lints]
+workspace = true
