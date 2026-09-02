@@ -114,6 +114,8 @@ pub enum AccountEvent {
     GroupNotice(Box<crate::ResolvedGroupNotice>),
     /// One authenticated group request with an actionable, versioned reference.
     GroupRequest(Box<crate::ResolvedGroupRequest>),
+    /// One authenticated friend request with an actionable, versioned reference.
+    FriendRequest(Box<crate::ResolvedFriendRequest>),
     /// One outbound message was accepted by QQ for this account.
     OutboundMessageAccepted {
         /// Installation-local account identifier.

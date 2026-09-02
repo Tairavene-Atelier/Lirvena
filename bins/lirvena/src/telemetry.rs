@@ -166,7 +166,8 @@ fn record_event(
     let result = match event {
         AccountEvent::IdentityReady(_)
         | AccountEvent::GroupNotice(_)
-        | AccountEvent::GroupRequest(_) => Ok(()),
+        | AccountEvent::GroupRequest(_)
+        | AccountEvent::FriendRequest(_) => Ok(()),
         AccountEvent::Message(_) => now_ms()
             .map_err(|_error| TelemetryStoreError::InvalidInput)
             .and_then(|time| store.record_received(time)),

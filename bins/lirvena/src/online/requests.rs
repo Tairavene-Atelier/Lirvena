@@ -1,9 +1,9 @@
 use account_api::{
-    AccountActionError, AccountIdentity, GroupRequestKind as ApiKind, GroupRequestReference,
-    ResolvedGroupRequest,
+    AccountActionError, AccountIdentity, FriendRequestReference, GroupRequestKind as ApiKind,
+    GroupRequestReference, ResolvedFriendRequest, ResolvedGroupRequest,
 };
 use qq_directory::{GroupRequestKind as DirectoryKind, GroupRequestRecord};
-use qq_message::GroupRequestSignal;
+use qq_message::{FriendRequestSignal, GroupRequestSignal};
 
 use super::{directory, packets::PacketRuntime, push::PushRuntime, runtime::OnlineContext};
 
@@ -45,6 +45,40 @@ pub(super) async fn resolve_group_request(
         resolved_inviter,
         record.comment.clone(),
         occurred_at,
+    )
+    .map(Some)
+    .map_err(|_error| AccountActionError::QqFailure)
+}
+
+pub(super) async fn resolve_friend_request(
+    identity: &AccountIdentity,
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    signal: FriendRequestSignal,
+    context: &mut OnlineContext<'_>,
+) -> Result<Option<ResolvedFriendRequest>, AccountActionError> {
+    let records = directory::friend_requests(packets, pushes, context).await?;
+    let record = records
+        .iter()
+        .filter(|record| {
+            record.is_pending()
+                && record.target_uid == context.credential.uid()
+                && record.source_uid == signal.source_uid()
+        })
+        .max_by_key(|record| record.timestamp);
+    let Some(record) = record else {
+        return Ok(None);
+    };
+    let user_id =
+        u64::from(directory::uid_uin(&record.source_uid, packets, pushes, context).await?);
+    let reference = FriendRequestReference::new(record.source_uid.clone())
+        .map_err(|_error| AccountActionError::QqFailure)?;
+    ResolvedFriendRequest::new(
+        identity.clone(),
+        reference,
+        user_id,
+        record.comment.clone(),
+        u64::from(record.timestamp),
     )
     .map(Some)
     .map_err(|_error| AccountActionError::QqFailure)

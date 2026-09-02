@@ -274,9 +274,30 @@ impl OnlineRuntime {
                     }
                     Ok(None) | Err(_) => eprintln!(
                         "Lirvena retained no OneBot group request because QQ's authenticated \
-                         request reference could not be resolved uniquely"
+                        request reference could not be resolved uniquely"
                     ),
                 },
+                DecodedPush::FriendRequest { signal, .. } => {
+                    match super::requests::resolve_friend_request(
+                        &self.identity,
+                        &self.packets,
+                        &self.pushes,
+                        signal,
+                        context,
+                    )
+                    .await
+                    {
+                        Ok(Some(request)) => {
+                            let _delivered = self
+                                .events
+                                .publish(AccountEvent::FriendRequest(Box::new(request)));
+                        }
+                        Ok(None) | Err(_) => eprintln!(
+                            "Lirvena retained no OneBot friend request because QQ's authenticated \
+                         request reference could not be resolved uniquely"
+                        ),
+                    }
+                }
             }
         }
     }

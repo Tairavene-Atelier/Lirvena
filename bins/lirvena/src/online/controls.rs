@@ -1,9 +1,12 @@
 use std::collections::BTreeMap;
 
-use account_api::{AccountActionError, AccountActionRequest, GroupRequestReference};
+use account_api::{
+    AccountActionError, AccountActionRequest, FriendRequestReference, GroupRequestReference,
+};
 use qq_control::{
-    ControlRequest, friend_like, group_admin, group_ban, group_card, group_kick, group_leave,
-    group_name, group_request, group_special_title, group_whole_ban, parse_control_response,
+    ControlRequest, friend_like, friend_request, group_admin, group_ban, group_card, group_kick,
+    group_leave, group_name, group_request, group_special_title, group_whole_ban,
+    parse_control_response,
 };
 use qq_directory::FriendEntry;
 use serde_json::{Value, json};
@@ -45,6 +48,32 @@ pub(super) async fn execute(
                 .get("reason")
                 .and_then(Value::as_str)
                 .unwrap_or_default(),
+        )
+        .map_err(|_error| AccountActionError::BadParameters)?;
+        send_control(&control, packets, pushes, context).await?;
+        return Ok(json!({}));
+    }
+    if request.action() == "set_friend_add_request" {
+        if params
+            .get("remark")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.is_empty())
+        {
+            return Err(AccountActionError::Unsupported);
+        }
+        let reference = FriendRequestReference::parse(required_text(params.get("flag"))?)
+            .map_err(|_error| AccountActionError::BadParameters)?;
+        let records = directory::friend_requests(packets, pushes, context).await?;
+        if !records.iter().any(|record| {
+            record.is_pending()
+                && record.target_uid == context.credential.uid()
+                && record.source_uid == reference.source_uid()
+        }) {
+            return Err(AccountActionError::QqFailure);
+        }
+        let control = friend_request(
+            reference.source_uid(),
+            optional_bool(params.get("approve"), true)?,
         )
         .map_err(|_error| AccountActionError::BadParameters)?;
         send_control(&control, packets, pushes, context).await?;

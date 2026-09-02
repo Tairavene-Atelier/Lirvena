@@ -2,6 +2,7 @@
 
 mod decoder;
 mod error;
+mod friend_request;
 mod model;
 mod notice;
 mod outbound;
@@ -11,6 +12,7 @@ mod rich_text;
 
 pub use decoder::{MessageDecoder, MessageDisposition};
 pub use error::MessageDecodeError;
+pub use friend_request::{FriendRequestSignal, decode_friend_request_signal};
 pub use model::{MessageClass, MessageEnvelope, MessagePayload, MessageRoute};
 pub use notice::{GroupNotice, MemberDecreaseKind, MemberIncreaseKind, decode_group_notice};
 pub use outbound::{

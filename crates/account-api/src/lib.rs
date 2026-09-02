@@ -3,6 +3,7 @@
 
 mod action;
 mod event;
+mod friend_request;
 mod group;
 mod hub;
 mod request;
@@ -12,6 +13,7 @@ pub use action::{
     PendingAccountAction, account_action_channel,
 };
 pub use event::{AccountEvent, AccountIdentity, InboundMessage};
+pub use friend_request::{FriendRequestReference, ResolvedFriendRequest};
 pub use group::{ResolvedGroupNotice, ResolvedGroupNoticeKind};
 pub use hub::{AccountEventHub, AccountEventPublisher, AccountEventSubscription, EventHubError};
 pub use request::{GroupRequestKind, GroupRequestReference, ResolvedGroupRequest};

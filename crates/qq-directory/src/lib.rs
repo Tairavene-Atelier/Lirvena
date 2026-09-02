@@ -3,6 +3,7 @@
 
 mod fields;
 mod friend;
+mod friend_request;
 mod group;
 mod member;
 mod request;
@@ -10,6 +11,10 @@ mod user;
 
 pub use friend::{
     FriendDirectoryError, FriendEntry, FriendPage, encode_friend_page_request, parse_friend_page,
+};
+pub use friend_request::{
+    FriendRequestDirectoryError, FriendRequestRecord, encode_friend_request_list_request,
+    parse_friend_request_list,
 };
 pub use group::{GroupDirectoryError, GroupEntry, encode_group_list_request, parse_group_list};
 pub use member::{
