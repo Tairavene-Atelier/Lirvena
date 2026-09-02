@@ -7,6 +7,7 @@ mod model;
 mod notice;
 mod outbound;
 mod proto;
+mod recall;
 mod request;
 mod rich_text;
 
@@ -18,6 +19,9 @@ pub use notice::{GroupNotice, MemberDecreaseKind, MemberIncreaseKind, decode_gro
 pub use outbound::{
     OutboundSegment, SendMessageInput, SendTextInput, SendTextOutcome, SendTextTarget,
     encode_message, encode_text_message, parse_send_message_response,
+};
+pub use recall::{
+    GroupRecallInput, PrivateRecallInput, encode_group_recall, encode_private_recall,
 };
 pub use request::{GroupRequestSignal, decode_group_request_signal};
 pub use rich_text::{

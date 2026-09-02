@@ -54,6 +54,7 @@ impl AccountIdentity {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InboundMessage {
     account: AccountIdentity,
+    message_id: u32,
     envelope: MessageEnvelope,
     rich_text: Option<RichTextMessage>,
 }
@@ -63,14 +64,22 @@ impl InboundMessage {
     #[must_use]
     pub const fn new(
         account: AccountIdentity,
+        message_id: u32,
         envelope: MessageEnvelope,
         rich_text: Option<RichTextMessage>,
     ) -> Self {
         Self {
             account,
+            message_id,
             envelope,
             rich_text,
         }
+    }
+
+    /// Returns the account-local `OneBot` message identifier.
+    #[must_use]
+    pub const fn message_id(&self) -> u32 {
+        self.message_id
     }
 
     /// Returns the authenticated receiving account.
