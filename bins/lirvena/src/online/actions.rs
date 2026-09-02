@@ -15,6 +15,7 @@ use super::message_registry::{MessageRegistry, OutboundCorrelations};
 use super::packets::{PacketContext, PacketRuntime};
 use super::parameters::required_u32;
 use super::push::PushRuntime;
+use super::read_report::mark_message_read;
 use super::runtime::OnlineContext;
 use crate::opaque::{OpaqueOperation, request_reserve};
 use crate::support::{now_ms, now_seconds, random_nonzero_u32};
@@ -76,6 +77,7 @@ pub(super) async fn execute_account_action(
             .await
         }
         "delete_msg" => recall_message(request, packets, pushes, messages, context).await,
+        "mark_msg_as_read" => mark_message_read(request, packets, pushes, messages, context).await,
         "send_like"
         | "set_group_kick"
         | "set_group_ban"
