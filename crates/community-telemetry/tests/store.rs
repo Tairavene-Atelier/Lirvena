@@ -46,7 +46,7 @@ fn completed_day_exposes_only_fixed_buckets() -> Result<(), Box<dyn std::error::
 fn active_duration_is_not_summed_per_account_and_splits_at_utc_boundary()
 -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempfile::tempdir()?;
-    let mut store = CommunityTelemetryStore::open(temporary.path(), DAY - 2_000)?;
+    let mut store = CommunityTelemetryStore::open(&temporary.path().join("state"), DAY - 2_000)?;
     store.set_account_active(DAY - 1_000, true)?;
     store.set_account_active(DAY - 500, true)?;
     store.set_account_active(DAY + 1_000, false)?;
@@ -65,7 +65,7 @@ fn active_duration_is_not_summed_per_account_and_splits_at_utc_boundary()
 #[test]
 fn current_day_cannot_be_reported_or_marked_sent() -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempfile::tempdir()?;
-    let mut store = CommunityTelemetryStore::open(temporary.path(), DAY + 1)?;
+    let mut store = CommunityTelemetryStore::open(&temporary.path().join("state"), DAY + 1)?;
     store.record_received(DAY + 2)?;
     assert!(store.oldest_pending(DAY + 3)?.is_none());
     assert!(store.mark_sent(1, DAY + 3).is_err());
@@ -76,7 +76,7 @@ fn current_day_cannot_be_reported_or_marked_sent() -> Result<(), Box<dyn std::er
 fn checkpoint_closes_previous_day_while_account_stays_active()
 -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempfile::tempdir()?;
-    let mut store = CommunityTelemetryStore::open(temporary.path(), DAY - 2_000)?;
+    let mut store = CommunityTelemetryStore::open(&temporary.path().join("state"), DAY - 2_000)?;
     store.set_account_active(DAY - 1_000, true)?;
     store.checkpoint_activity(DAY + 1_000)?;
     let first = store
