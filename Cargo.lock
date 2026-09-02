@@ -1464,6 +1464,7 @@ name = "qq-control"
 version = "0.0.0"
 dependencies = [
  "prost",
+ "qq-wire",
 ]
 
 [[package]]
@@ -1471,6 +1472,7 @@ name = "qq-directory"
 version = "0.0.0"
 dependencies = [
  "prost",
+ "qq-wire",
 ]
 
 [[package]]
@@ -1561,6 +1563,9 @@ dependencies = [
 [[package]]
 name = "qq-wire"
 version = "0.0.0"
+dependencies = [
+ "prost",
+]
 
 [[package]]
 name = "qrcode"

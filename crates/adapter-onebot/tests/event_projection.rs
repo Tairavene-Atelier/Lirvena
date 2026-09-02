@@ -1,7 +1,8 @@
 //! Evidence-preserving `OneBot` message-event projection contracts.
 
 use account_api::{
-    AccountEvent, AccountIdentity, InboundMessage, ResolvedGroupNotice, ResolvedGroupNoticeKind,
+    AccountEvent, AccountIdentity, GroupRequestKind, GroupRequestReference, InboundMessage,
+    ResolvedGroupNotice, ResolvedGroupNoticeKind, ResolvedGroupRequest,
 };
 use account_runtime::AccountLocalId;
 use adapter_onebot::{IdFormat, project_account_event};
@@ -11,6 +12,59 @@ use qq_message::{MessageDecoder, MessageDisposition};
 use serde_json::json;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+#[test]
+fn group_request_projects_actionable_opaque_flag() -> TestResult {
+    let reference = GroupRequestReference::new(77, 1, 12_345)?;
+    let event = AccountEvent::GroupRequest(Box::new(ResolvedGroupRequest::new(
+        identity()?,
+        reference,
+        GroupRequestKind::Join,
+        42,
+        None,
+        "hello".to_owned(),
+        1_800_000_000,
+    )?));
+    let projected = project_account_event(&event, IdFormat::String)?.ok_or("missing request")?;
+    assert_eq!(
+        projected,
+        json!({
+            "time": 1_800_000_000,
+            "self_id": "10001",
+            "post_type": "request",
+            "request_type": "group",
+            "sub_type": "add",
+            "group_id": "12345",
+            "user_id": "42",
+            "comment": "hello",
+            "flag": reference.flag(),
+        })
+    );
+    assert_eq!(
+        GroupRequestReference::parse(projected["flag"].as_str().ok_or("flag")?)?,
+        reference
+    );
+    Ok(())
+}
+
+#[test]
+fn member_invitation_request_keeps_add_semantics_and_inviter_extension() -> TestResult {
+    let reference = GroupRequestReference::new(78, 22, 12_345)?;
+    let event = AccountEvent::GroupRequest(Box::new(ResolvedGroupRequest::new(
+        identity()?,
+        reference,
+        GroupRequestKind::Invitation,
+        42,
+        Some(43),
+        String::new(),
+        1_800_000_001,
+    )?));
+    let projected = project_account_event(&event, IdFormat::Number)?.ok_or("missing request")?;
+    assert_eq!(projected["sub_type"], "add");
+    assert_eq!(projected["user_id"], 42);
+    assert_eq!(projected["invitor_id"], 43);
+    Ok(())
+}
 
 #[derive(Clone, PartialEq, Message)]
 struct PushBody {

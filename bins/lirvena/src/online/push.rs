@@ -3,8 +3,8 @@ use std::io;
 
 use qq_login::CredentialLogin;
 use qq_message::{
-    GroupNotice, MessageDecoder, MessageDisposition, MessageEnvelope, RichTextMessage,
-    decode_group_notice, decode_rich_text,
+    GroupNotice, GroupRequestSignal, MessageDecoder, MessageDisposition, MessageEnvelope,
+    RichTextMessage, decode_group_notice, decode_group_request_signal, decode_rich_text,
 };
 use qq_online::{PushOutcome, PushProcessor};
 use qq_profile::{LinuxNtProfile, PushPlan, decode_push_plan};
@@ -40,13 +40,20 @@ pub(super) enum DecodedPush {
         occurred_at: u64,
         encoded_len: usize,
     },
+    GroupRequest {
+        signal: GroupRequestSignal,
+        occurred_at: u64,
+        encoded_len: usize,
+    },
 }
 
 impl DecodedPush {
     fn encoded_len(&self) -> usize {
         match self {
             Self::Message(message) => encoded_message_len(message),
-            Self::GroupNotice { encoded_len, .. } => *encoded_len,
+            Self::GroupNotice { encoded_len, .. } | Self::GroupRequest { encoded_len, .. } => {
+                *encoded_len
+            }
         }
     }
 }
@@ -171,6 +178,18 @@ impl PushRuntime {
             return Ok(());
         };
         let encoded_len = encoded_envelope_len(&envelope);
+        if let Some(signal) = decode_group_request_signal(&envelope)? {
+            self.queued_message_bytes = self
+                .queued_message_bytes
+                .checked_add(encoded_len)
+                .ok_or_else(|| io::Error::other("message queue byte count overflow"))?;
+            self.events.push_back(DecodedPush::GroupRequest {
+                signal,
+                occurred_at: u64::try_from(envelope.timestamp()).unwrap_or_default(),
+                encoded_len,
+            });
+            return Ok(());
+        }
         if let Some(notice) = decode_group_notice(&envelope)? {
             self.queued_message_bytes = self
                 .queued_message_bytes

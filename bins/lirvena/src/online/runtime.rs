@@ -253,6 +253,30 @@ impl OnlineRuntime {
                         ),
                     }
                 }
+                DecodedPush::GroupRequest {
+                    signal,
+                    occurred_at,
+                    ..
+                } => match super::requests::resolve_group_request(
+                    &self.identity,
+                    &self.packets,
+                    &self.pushes,
+                    signal,
+                    occurred_at,
+                    context,
+                )
+                .await
+                {
+                    Ok(Some(request)) => {
+                        let _delivered = self
+                            .events
+                            .publish(AccountEvent::GroupRequest(Box::new(request)));
+                    }
+                    Ok(None) | Err(_) => eprintln!(
+                        "Lirvena retained no OneBot group request because QQ's authenticated \
+                         request reference could not be resolved uniquely"
+                    ),
+                },
             }
         }
     }

@@ -2,6 +2,11 @@
 #![forbid(unsafe_code)]
 
 use prost::Message;
+use qq_wire::{decode_oidb_response, encode_oidb_request};
+
+mod group_request;
+
+pub use group_request::group_request;
 
 const MAX_UID_BYTES: usize = 128;
 const MAX_TEXT_BYTES: usize = 4_096;
@@ -234,8 +239,8 @@ pub fn friend_like(uid: &str, count: u32) -> Result<ControlRequest, ControlError
 ///
 /// Returns an error for malformed data or a nonzero QQ result.
 pub fn parse_control_response(input: &[u8]) -> Result<(), ControlError> {
-    let response = OidbResponse::decode(input).map_err(|_error| ControlError)?;
-    if response.error_code == 0 {
+    let response = decode_oidb_response(input).map_err(|_error| ControlError)?;
+    if response.error_code() == 0 {
         Ok(())
     } else {
         Err(ControlError)
@@ -274,19 +279,25 @@ fn request(
     signing_operation: Option<u32>,
     body: &impl Message,
 ) -> Result<ControlRequest, ControlError> {
+    request_reserved(command, subcommand, route, signing_operation, 0, body)
+}
+
+pub(crate) fn request_reserved(
+    command: u32,
+    subcommand: u32,
+    route: &'static str,
+    signing_operation: Option<u32>,
+    reserved: i32,
+    body: &impl Message,
+) -> Result<ControlRequest, ControlError> {
     let body = body.encode_to_vec();
     if body.is_empty() {
         return Err(ControlError);
     }
     Ok(ControlRequest {
         command: route,
-        body: OidbRequest {
-            command,
-            subcommand,
-            error_code: 0,
-            body,
-        }
-        .encode_to_vec(),
+        body: encode_oidb_request(command, subcommand, &body, reserved)
+            .map_err(|_error| ControlError)?,
         signing_operation,
     })
 }
@@ -299,7 +310,11 @@ fn validate_group(group_id: u32) -> Result<(), ControlError> {
     }
 }
 
-fn validate_group_uid_text(group_id: u32, uid: &str, text: &str) -> Result<(), ControlError> {
+pub(crate) fn validate_group_uid_text(
+    group_id: u32,
+    uid: &str,
+    text: &str,
+) -> Result<(), ControlError> {
     validate_group(group_id)?;
     if uid.is_empty()
         || uid.len() > MAX_UID_BYTES
@@ -311,24 +326,6 @@ fn validate_group_uid_text(group_id: u32, uid: &str, text: &str) -> Result<(), C
     } else {
         Ok(())
     }
-}
-
-#[derive(Clone, PartialEq, Message)]
-struct OidbRequest {
-    #[prost(uint32, tag = "1")]
-    command: u32,
-    #[prost(uint32, tag = "2")]
-    subcommand: u32,
-    #[prost(uint32, tag = "3")]
-    error_code: u32,
-    #[prost(bytes = "vec", tag = "4")]
-    body: Vec<u8>,
-}
-
-#[derive(Clone, PartialEq, Message)]
-struct OidbResponse {
-    #[prost(uint32, tag = "3")]
-    error_code: u32,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -467,36 +464,48 @@ mod tests {
     fn whole_unmute_forces_explicit_zero_and_sign_slot() -> Result<(), Box<dyn std::error::Error>> {
         let action = group_whole_ban(12_345, false)?;
         assert_eq!(action.signing_operation(), Some(4));
-        let outer = OidbRequest::decode(action.body())?;
-        let body = WholeMuteBody::decode(outer.body.as_slice())?;
+        let outer = qq_wire::decode_oidb_request(action.body())?;
+        let body = WholeMuteBody::decode(outer.body())?;
         assert_eq!(body.state.and_then(|state| state.value), Some(0));
         Ok(())
     }
 
     #[test]
     fn member_card_and_title_use_distinct_subcommands() -> Result<(), Box<dyn std::error::Error>> {
-        let card = OidbRequest::decode(group_card(1, "uid", "card")?.body())?;
-        let title = OidbRequest::decode(group_special_title(1, "uid", "title")?.body())?;
-        assert_eq!(card.subcommand, 3);
-        assert_eq!(title.subcommand, 2);
+        let card = qq_wire::decode_oidb_request(group_card(1, "uid", "card")?.body())?;
+        let title = qq_wire::decode_oidb_request(group_special_title(1, "uid", "title")?.body())?;
+        assert_eq!(card.subcommand(), 3);
+        assert_eq!(title.subcommand(), 2);
         Ok(())
     }
 
     #[test]
     fn rejected_response_never_reports_success() {
-        let rejected = OidbResponse { error_code: 1 }.encode_to_vec();
+        let rejected = TestOidbResponse {
+            error_code: 1,
+            body: Vec::new(),
+        }
+        .encode_to_vec();
         assert_eq!(parse_control_response(&rejected), Err(ControlError));
     }
 
     #[test]
     fn friend_like_is_bounded_and_uses_linux_uid() -> Result<(), Box<dyn std::error::Error>> {
         let request = friend_like("u_target", 10)?;
-        let outer = OidbRequest::decode(request.body())?;
-        let body = FriendLikeBody::decode(outer.body.as_slice())?;
-        assert_eq!((outer.command, outer.subcommand), (0x07e5, 104));
+        let outer = qq_wire::decode_oidb_request(request.body())?;
+        let body = FriendLikeBody::decode(outer.body())?;
+        assert_eq!((outer.command(), outer.subcommand()), (0x07e5, 104));
         assert_eq!(body.uid, "u_target");
         assert_eq!(body.count, 10);
         assert!(friend_like("u_target", 11).is_err());
         Ok(())
+    }
+
+    #[derive(Clone, PartialEq, Message)]
+    struct TestOidbResponse {
+        #[prost(uint32, tag = "3")]
+        error_code: u32,
+        #[prost(bytes = "vec", tag = "4")]
+        body: Vec<u8>,
     }
 }

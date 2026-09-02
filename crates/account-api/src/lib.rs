@@ -5,6 +5,7 @@ mod action;
 mod event;
 mod group;
 mod hub;
+mod request;
 
 pub use action::{
     AccountActionError, AccountActionHandle, AccountActionReceiver, AccountActionRequest,
@@ -13,3 +14,4 @@ pub use action::{
 pub use event::{AccountEvent, AccountIdentity, InboundMessage};
 pub use group::{ResolvedGroupNotice, ResolvedGroupNoticeKind};
 pub use hub::{AccountEventHub, AccountEventPublisher, AccountEventSubscription, EventHubError};
+pub use request::{GroupRequestKind, GroupRequestReference, ResolvedGroupRequest};

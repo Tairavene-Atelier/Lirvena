@@ -112,6 +112,8 @@ pub enum AccountEvent {
     Message(Box<InboundMessage>),
     /// One authenticated group-system notice with resolved numeric identities.
     GroupNotice(Box<crate::ResolvedGroupNotice>),
+    /// One authenticated group request with an actionable, versioned reference.
+    GroupRequest(Box<crate::ResolvedGroupRequest>),
     /// One outbound message was accepted by QQ for this account.
     OutboundMessageAccepted {
         /// Installation-local account identifier.
