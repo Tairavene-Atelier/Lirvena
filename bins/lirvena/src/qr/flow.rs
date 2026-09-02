@@ -81,7 +81,6 @@ pub(super) async fn run(
         &mut qq,
         QrPolling {
             profile,
-            realm,
             device: &device,
             random_key: &random_key,
             key_agreement: &key_agreement,
@@ -121,6 +120,7 @@ pub(super) async fn run(
             ceylith,
             qq: &mut qq,
             profile,
+            realm,
             device: &device,
             credential: &credential,
             uin: secrets.uin(),
