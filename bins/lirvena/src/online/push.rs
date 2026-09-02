@@ -34,7 +34,7 @@ pub(super) struct DecodedMessage {
 /// One authenticated QQ event admitted by the current transport generation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) enum DecodedPush {
-    Message(DecodedMessage),
+    Message(Box<DecodedMessage>),
     GroupNotice {
         notice: GroupNotice,
         occurred_at: u64,
@@ -196,7 +196,8 @@ impl PushRuntime {
             .queued_message_bytes
             .checked_add(encoded_message_len(&message))
             .ok_or_else(|| io::Error::other("message queue byte count overflow"))?;
-        self.events.push_back(DecodedPush::Message(message));
+        self.events
+            .push_back(DecodedPush::Message(Box::new(message)));
         Ok(())
     }
 }

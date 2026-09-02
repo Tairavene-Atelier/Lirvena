@@ -66,7 +66,7 @@ impl OnlineRuntime {
 
     pub(crate) async fn bootstrap(
         &mut self,
-        context: OnlineContext<'_>,
+        mut context: OnlineContext<'_>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         require_action(
             self.machine.start(self.generation)?,
@@ -226,7 +226,7 @@ impl OnlineRuntime {
     async fn publish_pending_events(&mut self, context: &mut OnlineContext<'_>) {
         while let Some(event) = self.pushes.pop_event() {
             match event {
-                DecodedPush::Message(message) => self.publish_message(message),
+                DecodedPush::Message(message) => self.publish_message(*message),
                 DecodedPush::GroupNotice {
                     notice,
                     occurred_at,

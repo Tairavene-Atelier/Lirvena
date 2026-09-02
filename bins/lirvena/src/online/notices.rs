@@ -27,7 +27,7 @@ pub(super) async fn resolve_group_notice(
         ResolvedGroupNoticeKind::MemberDecrease(MemberDecreaseKind::KickMe) => identity.qq_id(),
         _ => resolve_uid(&member_uid, members.as_deref())?,
     };
-    let operator_id = match operator_uid.as_deref() {
+    let resolved_operator = match operator_uid.as_deref() {
         Some(uid) => Some(resolve_uid(uid, members.as_deref())?),
         None => None,
     };
@@ -35,7 +35,7 @@ pub(super) async fn resolve_group_notice(
         identity.clone(),
         u64::from(group_id),
         user_id,
-        operator_id,
+        resolved_operator,
         kind,
         occurred_at,
     )
