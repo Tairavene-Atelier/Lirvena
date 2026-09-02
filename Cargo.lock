@@ -32,6 +32,7 @@ dependencies = [
  "axum",
  "futures-util",
  "hmac",
+ "prost",
  "qq-message",
  "reqwest",
  "rustls",

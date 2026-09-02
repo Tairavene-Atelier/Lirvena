@@ -29,6 +29,7 @@ url = "=2.5.8"
 zeroize = "=1.9.0"
 
 [dev-dependencies]
+prost = "=0.14.4"
 reqwest = { version = "=0.13.4", default-features = false, features = ["json", "rustls-no-provider"] }
 tokio = { version = "=1.53.1", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
 
