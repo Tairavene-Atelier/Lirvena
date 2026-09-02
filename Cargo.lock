@@ -13,6 +13,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "account-message-store"
+version = "0.0.0"
+dependencies = [
+ "account-runtime",
+ "local-state",
+ "rusqlite",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "account-runtime"
 version = "0.0.0"
 dependencies = [
@@ -1070,6 +1081,7 @@ name = "lirvena"
 version = "0.0.0"
 dependencies = [
  "account-api",
+ "account-message-store",
  "account-runtime",
  "adapter-onebot",
  "ceylith-client",

@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::io;
+use std::path::Path;
 use std::time::Duration;
 
 use account_api::{
@@ -54,7 +55,9 @@ impl OnlineRuntime {
         device: &QrDevice,
         identity: AccountIdentity,
         events: AccountEventPublisher,
+        state_directory: &Path,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        let messages = MessageRegistry::open(state_directory, identity.local_id())?;
         Ok(Self {
             machine: OnlineMachine::new(decode_online_plan(profile)?),
             packets: PacketRuntime::new(profile, device)?,
@@ -63,7 +66,7 @@ impl OnlineRuntime {
             identity,
             events,
             friends: BTreeMap::new(),
-            messages: MessageRegistry::new(),
+            messages,
         })
     }
 
@@ -150,7 +153,7 @@ impl OnlineRuntime {
                 context.uin,
             )
             .await?;
-        self.publish_pending_events(&mut context).await;
+        self.publish_pending_events(&mut context).await?;
         Ok(())
     }
 
@@ -171,7 +174,7 @@ impl OnlineRuntime {
                     context.uin,
                 )
                 .await?;
-            self.publish_pending_events(&mut context).await;
+            self.publish_pending_events(&mut context).await?;
             let due_at = self
                 .machine
                 .next_due_ms()
@@ -196,7 +199,7 @@ impl OnlineRuntime {
                         Err(error) if error.is_idle_timeout() => continue,
                         Err(error) => return Err(error.into()),
                     }
-                    self.publish_pending_events(&mut context).await;
+                    self.publish_pending_events(&mut context).await?;
                     continue;
                 }
                 pending = actions.receive() => {
@@ -227,10 +230,13 @@ impl OnlineRuntime {
         }
     }
 
-    async fn publish_pending_events(&mut self, context: &mut OnlineContext<'_>) {
+    async fn publish_pending_events(
+        &mut self,
+        context: &mut OnlineContext<'_>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         while let Some(event) = self.pushes.pop_event() {
             match event {
-                DecodedPush::Message(message) => self.publish_message(*message),
+                DecodedPush::Message(message) => self.publish_message(*message)?,
                 DecodedPush::GroupNotice {
                     notice,
                     occurred_at,
@@ -304,24 +310,27 @@ impl OnlineRuntime {
                 }
             }
         }
+        Ok(())
     }
 
-    fn publish_message(&mut self, message: super::push::DecodedMessage) {
+    fn publish_message(
+        &mut self,
+        message: super::push::DecodedMessage,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let segment_count = message.rich_text().map_or(0, |body| body.elements().len());
         let (envelope, rich_text) = message.into_parts();
         let message_class = envelope.class();
-        let message_id = self.messages.register_inbound(&envelope);
-        let event = AccountEvent::Message(Box::new(InboundMessage::new(
-            self.identity.clone(),
-            message_id,
-            envelope,
-            rich_text,
-        )));
-        let _delivered = self.events.publish(event);
+        let (message_id, recall) = self.messages.prepare_inbound(&envelope)?;
+        let message = InboundMessage::new(self.identity.clone(), message_id, envelope, rich_text);
+        self.messages.retain_inbound(&message, recall, now_ms()?)?;
+        let _delivered = self
+            .events
+            .publish(AccountEvent::Message(Box::new(message)));
         eprintln!(
             "Lirvena received authenticated QQ {message_class:?} message with \
              {segment_count} decoded segments"
         );
+        Ok(())
     }
 
     async fn execute_due(

@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 account-api = { version = "=0.0.0", path = "../../crates/account-api" }
+account-message-store = { version = "=0.0.0", path = "../../crates/account-message-store" }
 account-runtime = { version = "=0.0.0", path = "../../crates/account-runtime" }
 adapter-onebot = { version = "=0.0.0", path = "../../crates/adapter-onebot" }
 ceylith-client = { version = "=0.0.0", path = "../../crates/ceylith-client" }

@@ -6,7 +6,7 @@ use account_api::{
     ResolvedGroupRequest,
 };
 use account_runtime::AccountLocalId;
-use adapter_onebot::{IdFormat, project_account_event};
+use adapter_onebot::{IdFormat, project_account_event, project_message_record};
 use prost::Message;
 use qq_message::{MemberDecreaseKind, MemberIncreaseKind};
 use qq_message::{MessageDecoder, MessageDisposition};
@@ -154,6 +154,13 @@ fn group_message_includes_only_observed_sender_fields() -> TestResult {
         json!({"user_id": "42", "nickname": "member", "card": "member"})
     );
     assert!(projected["sender"].get("role").is_none());
+    let AccountEvent::Message(message) = &event else {
+        return Err("expected message".into());
+    };
+    let stored = project_message_record(message, IdFormat::Number)?;
+    assert_eq!(stored["message_id"], 9);
+    assert_eq!(stored["real_id"], 9);
+    assert!(stored.get("post_type").is_none());
     Ok(())
 }
 

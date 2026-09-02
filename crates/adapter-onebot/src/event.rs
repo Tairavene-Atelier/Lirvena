@@ -61,6 +61,32 @@ pub fn project_account_event(
     }
 }
 
+/// Projects one retained incoming message to the standard `get_msg` response data.
+///
+/// # Errors
+///
+/// Returns an error when the authenticated message lacks a valid `OneBot` projection.
+pub fn project_message_record(
+    message: &InboundMessage,
+    id_format: IdFormat,
+) -> Result<Value, EventProjectionError> {
+    let Value::Object(event) = project_message(message, id_format)? else {
+        return Err(EventProjectionError);
+    };
+    let mut record = Map::new();
+    for key in ["time", "message_type", "message_id", "sender", "message"] {
+        record.insert(
+            key.to_owned(),
+            event.get(key).cloned().ok_or(EventProjectionError)?,
+        );
+    }
+    record.insert(
+        "real_id".to_owned(),
+        id_format.value(u64::from(message.message_id())),
+    );
+    Ok(Value::Object(record))
+}
+
 fn project_friend_request(request: &ResolvedFriendRequest, id_format: IdFormat) -> Value {
     json!({
         "time": request.occurred_at(),

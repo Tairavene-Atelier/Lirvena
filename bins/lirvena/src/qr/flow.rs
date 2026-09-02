@@ -20,15 +20,29 @@ use crate::config::AccountConfig;
 use crate::online::{OnlineContext, OnlineRuntime};
 use crate::support::{encode_hex, now_ms, now_seconds, random_array, random_nonzero_u32};
 
+pub(super) struct AccountFlow<'a> {
+    pub(super) config: &'a AccountConfig,
+    pub(super) state_directory: &'a Path,
+    pub(super) ceylith: &'a InstallationClient,
+    pub(super) profile: &'a LinuxNtProfile,
+    pub(super) realm: AssignedRealm,
+    pub(super) account: &'a AccountHandle,
+    pub(super) events: &'a AccountEventPublisher,
+}
+
 pub(super) async fn run(
-    config: &AccountConfig,
-    ceylith: &InstallationClient,
-    profile: &LinuxNtProfile,
-    realm: AssignedRealm,
-    account: &AccountHandle,
-    events: &AccountEventPublisher,
+    flow: AccountFlow<'_>,
     actions: AccountActionReceiver,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let AccountFlow {
+        config,
+        state_directory,
+        ceylith,
+        profile,
+        realm,
+        account,
+        events,
+    } = flow;
     let mut login = LoginMachine::new();
     let _event = begin_qr_request(&mut login, now_ms()?)?;
     let key_agreement = LinuxKeyAgreement::new(profile_peer(profile)?)?;
@@ -114,7 +128,8 @@ pub(super) async fn run(
     )?;
     let _delivered = events.publish(AccountEvent::IdentityReady(identity.clone()));
     let mut qq = AuthenticatedSession::new(qq);
-    let mut online = OnlineRuntime::new(profile, &device, identity, events.clone())?;
+    let mut online =
+        OnlineRuntime::new(profile, &device, identity, events.clone(), state_directory)?;
     online
         .bootstrap(OnlineContext {
             ceylith,
@@ -162,3 +177,4 @@ pub(super) async fn run(
     let _previous = login.transition(LoginState::Stopped)?;
     Ok(())
 }
+use std::path::Path;
