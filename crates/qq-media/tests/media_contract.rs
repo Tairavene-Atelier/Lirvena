@@ -2,9 +2,7 @@
 
 use std::time::Duration;
 
-use qq_media::{
-    MediaPolicy, MediaReference, MediaResolver, MediaSourceKind, RemoteMediaPolicy,
-};
+use qq_media::{MediaPolicy, MediaReference, MediaResolver, MediaSourceKind, RemoteMediaPolicy};
 
 #[tokio::test]
 async fn local_base64_and_cache_share_one_size_policy() -> Result<(), Box<dyn std::error::Error>> {
