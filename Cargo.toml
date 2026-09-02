@@ -8,6 +8,7 @@ members = [
     "crates/ceylith-client",
     "crates/ceylith-crypto",
     "crates/ceylith-protocol",
+    "crates/community-telemetry",
     "crates/local-state",
     "crates/notify-runtime",
     "crates/qq-domain",

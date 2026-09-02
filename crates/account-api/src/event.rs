@@ -110,6 +110,22 @@ pub enum AccountEvent {
     },
     /// One authenticated, deduplicated message.
     Message(Box<InboundMessage>),
+    /// One outbound message was accepted by QQ for this account.
+    OutboundMessageAccepted {
+        /// Installation-local account identifier.
+        local_id: AccountLocalId,
+        /// Local observation time in Unix milliseconds.
+        occurred_at_ms: u64,
+    },
+    /// One full group-list synchronization completed for this account.
+    GroupCountObserved {
+        /// Installation-local account identifier.
+        local_id: AccountLocalId,
+        /// Exact per-account count retained only inside local aggregation.
+        count: u64,
+        /// Local observation time in Unix milliseconds.
+        occurred_at_ms: u64,
+    },
 }
 
 use crate::EventHubError;

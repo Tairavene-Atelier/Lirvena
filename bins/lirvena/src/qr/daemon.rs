@@ -16,12 +16,15 @@ use qq_profile::LinuxNtProfile;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 
-use super::ceylith::{connect, ensure_matching_admission, negotiate_profile, runtime};
+use super::ceylith::{
+    NegotiatedProfile, connect, ensure_matching_admission, negotiate_profile, runtime,
+};
 use super::continuity::{ContinuityAction, classify};
 use super::flow;
 use crate::config::{AccountConfig, ProcessConfig};
 use crate::notification;
 use crate::support::now_ms;
+use crate::telemetry::{CommunityTelemetryRuntime, CommunityTelemetrySetup};
 
 const ACCOUNT_QUEUE_CAPACITY: usize = 64;
 const EVENT_QUEUE_CAPACITY: usize = 1_024;
@@ -57,6 +60,14 @@ pub(super) async fn run(config: ProcessConfig) -> Result<(), Box<dyn std::error:
     let grant_plan = plan(&config, ceylith.admission())?;
     report_fallbacks(&grant_plan);
     let profiles = Profiles::negotiate(&config, &ceylith, &client_runtime, &grant_plan).await?;
+    let telemetry_events = account_events.subscribe();
+    let mut telemetry_runtime = start_community_telemetry(
+        &config,
+        &client_runtime,
+        &ceylith,
+        &profiles,
+        telemetry_events,
+    );
     let mut watch_runtime = start_watch(&config, &client_runtime, &ceylith, &grant_plan).await?;
     let mut supervisor = AccountSupervisor::new();
     let mut jobs = JoinSet::new();
@@ -78,7 +89,7 @@ pub(super) async fn run(config: ProcessConfig) -> Result<(), Box<dyn std::error:
         let realm = grant_plan
             .assigned_realm(local_id)
             .ok_or_else(|| io::Error::other("account grant plan is incomplete"))?;
-        let profile = profiles.for_realm(realm)?.clone();
+        let profile = profiles.for_realm(realm)?.profile.clone();
         let (stop_sender, stop_receiver) = watch::channel(StopDirective::Running);
         stop_channels.insert(local_id, stop_sender);
         jobs.spawn(run_account(
@@ -105,6 +116,9 @@ pub(super) async fn run(config: ProcessConfig) -> Result<(), Box<dyn std::error:
     {
         first_error.get_or_insert_with(|| io::Error::other(error.to_string()));
     }
+    if let Some(telemetry) = telemetry_runtime.take() {
+        telemetry.shutdown().await;
+    }
     if let Err(error) = ceylith_runtime.shutdown().await {
         first_error.get_or_insert_with(|| io::Error::other(error.to_string()));
     }
@@ -117,6 +131,47 @@ pub(super) async fn run(config: ProcessConfig) -> Result<(), Box<dyn std::error:
         first_error.get_or_insert_with(|| io::Error::other(error.to_string()));
     }
     first_error.map_or(Ok(()), |error| Err(error.into()))
+}
+
+fn start_community_telemetry(
+    config: &ProcessConfig,
+    runtime: &ceylith_client::RuntimeDescriptor,
+    ceylith: &InstallationClient,
+    profiles: &Profiles,
+    events: account_api::AccountEventSubscription,
+) -> Option<CommunityTelemetryRuntime> {
+    if ceylith.admission().grant_class() != GrantClass::Community {
+        return None;
+    }
+    let Some(profile) = profiles.full.as_ref() else {
+        eprintln!("WARNING: Community telemetry has no negotiated Full Profile");
+        return None;
+    };
+    let setup = CommunityTelemetrySetup::new(
+        config.state_directory.clone(),
+        ceylith.clone(),
+        *config.installation_signing_seed,
+        config.installation_id,
+        config
+            .accounts
+            .iter()
+            .map(|account| account.account_slot_id),
+        ceylith_protocol::ProfileId::from_bytes(config.profile_id),
+        profile.manifest_digest,
+        runtime,
+    );
+    match setup.and_then(|setup| {
+        CommunityTelemetryRuntime::start(setup, events)
+            .map_err(|_| ceylith_client::ClientError::Configuration)
+    }) {
+        Ok(started) => Some(started),
+        Err(_error) => {
+            eprintln!(
+                "WARNING: Lirvena could not start required Community telemetry; current QQ lease remains unchanged but renewal evidence will be incomplete"
+            );
+            None
+        }
+    }
 }
 
 async fn run_account(
@@ -345,8 +400,8 @@ async fn start_watch(
 }
 
 struct Profiles {
-    public: Option<LinuxNtProfile>,
-    full: Option<LinuxNtProfile>,
+    public: Option<NegotiatedProfile>,
+    full: Option<NegotiatedProfile>,
 }
 
 impl Profiles {
@@ -375,7 +430,7 @@ impl Profiles {
         Ok(Self { public, full })
     }
 
-    fn for_realm(&self, realm: AssignedRealm) -> Result<&LinuxNtProfile, io::Error> {
+    fn for_realm(&self, realm: AssignedRealm) -> Result<&NegotiatedProfile, io::Error> {
         match realm {
             AssignedRealm::Public => self.public.as_ref(),
             AssignedRealm::Full => self.full.as_ref(),

@@ -225,6 +225,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "community-telemetry"
+version = "0.0.0"
+dependencies = [
+ "ceylith-protocol",
+ "local-state",
+ "rusqlite",
+ "tempfile",
+]
+
+[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -946,6 +956,7 @@ dependencies = [
  "ceylith-client",
  "ceylith-crypto",
  "ceylith-protocol",
+ "community-telemetry",
  "getrandom 0.4.3",
  "local-state",
  "notify-runtime",

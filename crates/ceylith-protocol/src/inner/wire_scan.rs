@@ -47,7 +47,10 @@ pub(super) fn validate_top_level(input: &[u8]) -> Result<(), CodecError> {
 }
 
 const fn known_body_tag(tag: u64) -> bool {
-    matches!(tag, 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 63)
+    matches!(
+        tag,
+        10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 63
+    )
 }
 
 fn read_varint(input: &[u8], position: &mut usize) -> Result<u64, CodecError> {

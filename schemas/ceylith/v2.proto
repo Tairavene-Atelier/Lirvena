@@ -51,6 +51,48 @@ enum ActionFlowStatus {
   ACTION_FLOW_STATUS_COMPLETE = 2;
 }
 
+enum GroupCountBucket {
+  GROUP_COUNT_BUCKET_UNSPECIFIED = 0;
+  GROUP_COUNT_BUCKET_ZERO = 1;
+  GROUP_COUNT_BUCKET_ONE_TO_FIVE = 2;
+  GROUP_COUNT_BUCKET_SIX_TO_TWENTY = 3;
+  GROUP_COUNT_BUCKET_TWENTY_ONE_TO_FIFTY = 4;
+  GROUP_COUNT_BUCKET_FIFTY_ONE_TO_ONE_HUNDRED = 5;
+  GROUP_COUNT_BUCKET_ONE_HUNDRED_ONE_TO_TWO_HUNDRED = 6;
+  GROUP_COUNT_BUCKET_TWO_HUNDRED_ONE_TO_FIVE_HUNDRED = 7;
+  GROUP_COUNT_BUCKET_OVER_FIVE_HUNDRED = 8;
+}
+
+enum MessageCountBucket {
+  MESSAGE_COUNT_BUCKET_UNSPECIFIED = 0;
+  MESSAGE_COUNT_BUCKET_ZERO = 1;
+  MESSAGE_COUNT_BUCKET_ONE_TO_TWENTY = 2;
+  MESSAGE_COUNT_BUCKET_TWENTY_ONE_TO_ONE_HUNDRED = 3;
+  MESSAGE_COUNT_BUCKET_ONE_HUNDRED_ONE_TO_FIVE_HUNDRED = 4;
+  MESSAGE_COUNT_BUCKET_FIVE_HUNDRED_ONE_TO_TWO_THOUSAND = 5;
+  MESSAGE_COUNT_BUCKET_TWO_THOUSAND_ONE_TO_TEN_THOUSAND = 6;
+  MESSAGE_COUNT_BUCKET_OVER_TEN_THOUSAND = 7;
+}
+
+enum ActiveDurationBucket {
+  ACTIVE_DURATION_BUCKET_UNSPECIFIED = 0;
+  ACTIVE_DURATION_BUCKET_ZERO = 1;
+  ACTIVE_DURATION_BUCKET_UNDER_ONE_HOUR = 2;
+  ACTIVE_DURATION_BUCKET_ONE_TO_FOUR_HOURS = 3;
+  ACTIVE_DURATION_BUCKET_FOUR_TO_EIGHT_HOURS = 4;
+  ACTIVE_DURATION_BUCKET_EIGHT_TO_SIXTEEN_HOURS = 5;
+  ACTIVE_DURATION_BUCKET_SIXTEEN_TO_TWENTY_FOUR_HOURS = 6;
+}
+
+enum AccountChurnBucket {
+  ACCOUNT_CHURN_BUCKET_UNSPECIFIED = 0;
+  ACCOUNT_CHURN_BUCKET_ZERO = 1;
+  ACCOUNT_CHURN_BUCKET_ONE = 2;
+  ACCOUNT_CHURN_BUCKET_TWO_TO_THREE = 3;
+  ACCOUNT_CHURN_BUCKET_FOUR_TO_SEVEN = 4;
+  ACCOUNT_CHURN_BUCKET_EIGHT_OR_MORE = 5;
+}
+
 message ClientRuntime {
   uint32 runtime_abi = 1;
   uint32 envelope_contract = 2;
@@ -175,6 +217,30 @@ message ActionFlowUpdate {
   uint64 expires_at_ms = 4;
 }
 
+message CommunityTelemetryReport {
+  bytes runtime_lease = 1;
+  bytes report_id = 2;
+  uint32 utc_day = 3;
+  GroupCountBucket group_count = 4;
+  MessageCountBucket messages_received = 5;
+  MessageCountBucket messages_sent = 6;
+  ActiveDurationBucket active_duration = 7;
+  bytes profile_id = 8;
+  bytes profile_manifest_digest = 9;
+  bytes build_digest = 10;
+  uint32 platform = 11;
+  uint32 architecture = 12;
+  AccountChurnBucket account_churn = 13;
+  uint64 generated_at_ms = 14;
+  bytes installation_signature = 15;
+}
+
+message TelemetryReceipt {
+  bytes report_id = 1;
+  bool accepted = 2;
+  uint32 code = 3;
+}
+
 message WatchRequest {
   bytes runtime_lease = 1;
   uint64 cursor = 2;
@@ -228,6 +294,8 @@ message InnerFrame {
     ActionFlowBegin action_flow_begin = 17;
     ActionObservation action_observation = 18;
     ActionFlowUpdate action_flow_update = 19;
+    CommunityTelemetryReport community_telemetry_report = 20;
+    TelemetryReceipt telemetry_receipt = 21;
     ErrorFrame error = 63;
   }
 }

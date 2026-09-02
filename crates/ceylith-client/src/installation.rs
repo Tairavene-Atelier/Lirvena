@@ -8,11 +8,13 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
 use crate::{
-    CeylithTcpClient, ClientError, OpaqueExchangeContext, RequestedAccess, RuntimeDescriptor,
+    CeylithTcpClient, ClientError, CommunityTelemetrySigner, CommunityTelemetrySpec,
+    OpaqueExchangeContext, RequestedAccess, RuntimeDescriptor,
     connection::{
         action_flow_begin_request_for, action_observation_request_for, opaque_exchange_request_for,
         profile_request_for, watch_request_for,
     },
+    decode_telemetry_receipt,
 };
 
 mod watch;
@@ -152,6 +154,23 @@ impl InstallationClient {
         let request = self.watch_request(cursor, max_wait_ms)?;
         let response = self.exchange(request).await?;
         decode_watch_response(&response, cursor).map_err(ClientError::from)
+    }
+
+    /// Signs, submits, and verifies one completed Community daily report.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error unless this is a Community admission, or when signing, transport, server
+    /// acceptance, or response correlation fails.
+    pub async fn submit_community_telemetry(
+        &self,
+        signer: &CommunityTelemetrySigner,
+        spec: CommunityTelemetrySpec,
+    ) -> Result<ceylith_protocol::TelemetryReportId, ClientError> {
+        let report_id = spec.report_id;
+        let request = signer.report(&self.admission, spec)?;
+        let response = self.exchange(request).await?;
+        decode_telemetry_receipt(&response, report_id)
     }
 }
 

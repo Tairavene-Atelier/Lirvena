@@ -59,4 +59,25 @@ impl RuntimeDescriptor {
     pub const fn as_wire(&self) -> &proto::ClientRuntime {
         &self.wire
     }
+
+    /// Returns the compiled platform discriminant.
+    #[must_use]
+    pub const fn platform(&self) -> u32 {
+        self.wire.platform
+    }
+
+    /// Returns the compiled architecture discriminant.
+    #[must_use]
+    pub const fn architecture(&self) -> u32 {
+        self.wire.architecture
+    }
+
+    /// Returns the running Lirvena build digest.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error only if an internally validated descriptor was corrupted.
+    pub fn build_digest(&self) -> Result<Digest32, ClientError> {
+        Digest32::try_from(self.wire.build_digest.as_slice()).map_err(|_| ClientError::Protocol)
+    }
 }

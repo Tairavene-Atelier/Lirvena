@@ -29,6 +29,12 @@ pub(crate) fn validate_inner(frame: &proto::InnerFrame) -> Result<(), CodecError
         proto::inner_frame::Body::ActionFlowBegin(value) => validate_action_flow_begin(value),
         proto::inner_frame::Body::ActionObservation(value) => validate_action_observation(value),
         proto::inner_frame::Body::ActionFlowUpdate(value) => validate_action_flow_update(value),
+        proto::inner_frame::Body::CommunityTelemetryReport(value) => {
+            crate::telemetry::validate_report(value)
+        }
+        proto::inner_frame::Body::TelemetryReceipt(value) => {
+            crate::telemetry::validate_receipt(value)
+        }
         proto::inner_frame::Body::GenericResult(value) => {
             validate_bounded(&value.payload, MAX_WATCH_PAYLOAD_LEN)
         }

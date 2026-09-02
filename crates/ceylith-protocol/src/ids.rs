@@ -137,6 +137,11 @@ fixed_bytes!(
     16
 );
 fixed_bytes!(
+    /// Random identifier for one idempotent daily telemetry report.
+    TelemetryReportId,
+    16
+);
+fixed_bytes!(
     /// Thirty-two-byte digest value.
     Digest32,
     32

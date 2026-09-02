@@ -6,7 +6,7 @@ use prost::Message;
 use crate::{CodecError, LengthKind, WireLimits, proto};
 
 /// Current encrypted inner-contract version.
-pub const CURRENT_INNER_CONTRACT: u32 = 3;
+pub const CURRENT_INNER_CONTRACT: u32 = 4;
 
 /// Encodes one structurally validated inner frame.
 ///
