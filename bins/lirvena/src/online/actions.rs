@@ -17,6 +17,7 @@ use super::parameters::required_u32;
 use super::push::PushRuntime;
 use super::read_report::mark_message_read;
 use super::runtime::OnlineContext;
+use super::user_profile::stranger_info;
 use crate::opaque::{OpaqueOperation, request_reserve};
 use crate::support::{now_ms, now_seconds, random_nonzero_u32};
 
@@ -42,6 +43,16 @@ pub(super) async fn execute_account_action(
         })),
         "can_send_image" | "can_send_record" => Ok(json!({"yes": false})),
         "get_friend_list" => directory::friend_list(packets, pushes, friends, context).await,
+        "get_stranger_info" => {
+            stranger_info(
+                request.params().get("user_id"),
+                request.params().get("no_cache"),
+                packets,
+                pushes,
+                context,
+            )
+            .await
+        }
         "get_group_list" => directory::group_list(packets, pushes, context).await,
         "get_group_info" => {
             directory::group_info(request.params().get("group_id"), packets, pushes, context).await
