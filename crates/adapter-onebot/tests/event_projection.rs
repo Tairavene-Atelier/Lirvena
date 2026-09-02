@@ -1,9 +1,12 @@
 //! Evidence-preserving `OneBot` message-event projection contracts.
 
-use account_api::{AccountEvent, AccountIdentity, InboundMessage};
+use account_api::{
+    AccountEvent, AccountIdentity, InboundMessage, ResolvedGroupNotice, ResolvedGroupNoticeKind,
+};
 use account_runtime::AccountLocalId;
 use adapter_onebot::{IdFormat, project_account_event};
 use prost::Message;
+use qq_message::{MemberDecreaseKind, MemberIncreaseKind};
 use qq_message::{MessageDecoder, MessageDisposition};
 use serde_json::json;
 
@@ -104,6 +107,53 @@ fn private_message_uses_the_observed_friend_name() -> TestResult {
     Ok(())
 }
 
+#[test]
+fn group_notice_projects_only_resolved_numeric_identities() -> TestResult {
+    let identity = identity()?;
+    let increase = AccountEvent::GroupNotice(Box::new(ResolvedGroupNotice::new(
+        identity.clone(),
+        88,
+        42,
+        Some(43),
+        ResolvedGroupNoticeKind::MemberIncrease(MemberIncreaseKind::Invite),
+        1_800_000_000,
+    )?));
+    let projected =
+        project_account_event(&increase, IdFormat::String)?.ok_or("missing increase event")?;
+    assert_eq!(projected["notice_type"], "group_increase");
+    assert_eq!(projected["sub_type"], "invite");
+    assert_eq!(projected["operator_id"], "43");
+
+    let decrease = AccountEvent::GroupNotice(Box::new(ResolvedGroupNotice::new(
+        identity,
+        88,
+        10_001,
+        None,
+        ResolvedGroupNoticeKind::MemberDecrease(MemberDecreaseKind::KickMe),
+        1_800_000_001,
+    )?));
+    let projected =
+        project_account_event(&decrease, IdFormat::Number)?.ok_or("missing decrease event")?;
+    assert_eq!(projected["notice_type"], "group_decrease");
+    assert_eq!(projected["sub_type"], "kick_me");
+    assert!(projected.get("operator_id").is_none());
+    Ok(())
+}
+
+#[test]
+fn unknown_group_notice_subtype_has_no_fabricated_projection() -> TestResult {
+    let event = AccountEvent::GroupNotice(Box::new(ResolvedGroupNotice::new(
+        identity()?,
+        88,
+        42,
+        None,
+        ResolvedGroupNoticeKind::MemberDecrease(MemberDecreaseKind::Unknown(999)),
+        1_800_000_000,
+    )?));
+    assert!(project_account_event(&event, IdFormat::Number).is_err());
+    Ok(())
+}
+
 fn event(
     message_type: u32,
     group: Option<(u32, &str)>,
@@ -137,12 +187,16 @@ fn event(
     let MessageDisposition::New(envelope) = decoder.decode_embedded(&body.encode_to_vec())? else {
         return Err("expected new message".into());
     };
-    let identity = AccountIdentity::new(
-        AccountLocalId::from_bytes([1; 16]),
-        10_001,
-        "self".to_owned(),
-    )?;
+    let identity = identity()?;
     Ok(AccountEvent::Message(Box::new(InboundMessage::new(
         identity, *envelope, None,
     ))))
+}
+
+fn identity() -> Result<AccountIdentity, account_api::EventHubError> {
+    AccountIdentity::new(
+        AccountLocalId::from_bytes([1; 16]),
+        10_001,
+        "self".to_owned(),
+    )
 }

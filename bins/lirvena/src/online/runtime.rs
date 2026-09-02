@@ -17,8 +17,9 @@ use tokio::net::TcpStream;
 use tokio::time::sleep;
 
 use super::actions::execute_account_action;
+use super::notices;
 use super::packets::{PacketContext, PacketRuntime};
-use super::push::PushRuntime;
+use super::push::{DecodedPush, PushRuntime};
 use crate::action_runtime::{self, BootstrapContext};
 use crate::support::now_ms;
 
@@ -65,7 +66,7 @@ impl OnlineRuntime {
 
     pub(crate) async fn bootstrap(
         &mut self,
-        context: OnlineContext<'_>,
+        mut context: OnlineContext<'_>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         require_action(
             self.machine.start(self.generation)?,
@@ -146,7 +147,7 @@ impl OnlineRuntime {
                 context.uin,
             )
             .await?;
-        self.publish_pending_messages();
+        self.publish_pending_events(&mut context).await;
         Ok(())
     }
 
@@ -167,7 +168,7 @@ impl OnlineRuntime {
                     context.uin,
                 )
                 .await?;
-            self.publish_pending_messages();
+            self.publish_pending_events(&mut context).await;
             let due_at = self
                 .machine
                 .next_due_ms()
@@ -192,7 +193,7 @@ impl OnlineRuntime {
                         Err(error) if error.is_idle_timeout() => continue,
                         Err(error) => return Err(error.into()),
                     }
-                    self.publish_pending_messages();
+                    self.publish_pending_events(&mut context).await;
                     continue;
                 }
                 pending = actions.receive() => {
@@ -222,22 +223,54 @@ impl OnlineRuntime {
         }
     }
 
-    fn publish_pending_messages(&mut self) {
-        while let Some(message) = self.pushes.pop_message() {
-            let segment_count = message.rich_text().map_or(0, |body| body.elements().len());
-            let (envelope, rich_text) = message.into_parts();
-            let message_class = envelope.class();
-            let event = AccountEvent::Message(Box::new(InboundMessage::new(
-                self.identity.clone(),
-                envelope,
-                rich_text,
-            )));
-            let _delivered = self.events.publish(event);
-            eprintln!(
-                "Lirvena received authenticated QQ {message_class:?} message with \
-                 {segment_count} decoded segments"
-            );
+    async fn publish_pending_events(&mut self, context: &mut OnlineContext<'_>) {
+        while let Some(event) = self.pushes.pop_event() {
+            match event {
+                DecodedPush::Message(message) => self.publish_message(*message),
+                DecodedPush::GroupNotice {
+                    notice,
+                    occurred_at,
+                    ..
+                } => {
+                    match notices::resolve_group_notice(
+                        &self.identity,
+                        &self.packets,
+                        &self.pushes,
+                        notice,
+                        occurred_at,
+                        context,
+                    )
+                    .await
+                    {
+                        Some(notice) => {
+                            let _delivered = self
+                                .events
+                                .publish(AccountEvent::GroupNotice(Box::new(notice)));
+                        }
+                        None => eprintln!(
+                            "Lirvena retained no OneBot group notice because its authenticated UID \
+                             could not be resolved without inventing an account identifier"
+                        ),
+                    }
+                }
+            }
         }
+    }
+
+    fn publish_message(&self, message: super::push::DecodedMessage) {
+        let segment_count = message.rich_text().map_or(0, |body| body.elements().len());
+        let (envelope, rich_text) = message.into_parts();
+        let message_class = envelope.class();
+        let event = AccountEvent::Message(Box::new(InboundMessage::new(
+            self.identity.clone(),
+            envelope,
+            rich_text,
+        )));
+        let _delivered = self.events.publish(event);
+        eprintln!(
+            "Lirvena received authenticated QQ {message_class:?} message with \
+             {segment_count} decoded segments"
+        );
     }
 
     async fn execute_due(
