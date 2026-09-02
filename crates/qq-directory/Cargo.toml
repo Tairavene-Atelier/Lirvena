@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 prost = "=0.14.4"
+qq-wire = { version = "=0.0.0", path = "../qq-wire" }
 
 [lints]
 workspace = true

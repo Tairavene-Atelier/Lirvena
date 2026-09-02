@@ -1,4 +1,7 @@
-use account_api::{AccountEvent, InboundMessage, ResolvedGroupNotice, ResolvedGroupNoticeKind};
+use account_api::{
+    AccountEvent, GroupRequestKind, InboundMessage, ResolvedGroupNotice, ResolvedGroupNoticeKind,
+    ResolvedGroupRequest,
+};
 use account_runtime::AccountPhase;
 use qq_message::{MemberDecreaseKind, MemberIncreaseKind, MentionTarget, MessageClass, Segment};
 use serde_json::{Map, Value, json};
@@ -48,10 +51,39 @@ pub fn project_account_event(
         }))),
         AccountEvent::Message(message) => project_message(message, id_format).map(Some),
         AccountEvent::GroupNotice(notice) => project_group_notice(notice, id_format).map(Some),
+        AccountEvent::GroupRequest(request) => Ok(Some(project_group_request(request, id_format))),
         AccountEvent::OutboundMessageAccepted { .. } | AccountEvent::GroupCountObserved { .. } => {
             Ok(None)
         }
     }
+}
+
+fn project_group_request(request: &ResolvedGroupRequest, id_format: IdFormat) -> Value {
+    let sub_type = match request.kind() {
+        GroupRequestKind::Join | GroupRequestKind::Invitation => "add",
+        GroupRequestKind::SelfInvitation => "invite",
+    };
+    let mut object = Map::from_iter([
+        ("time".to_owned(), json!(request.occurred_at())),
+        (
+            "self_id".to_owned(),
+            id_format.value(request.account().qq_id()),
+        ),
+        ("post_type".to_owned(), json!("request")),
+        ("request_type".to_owned(), json!("group")),
+        ("sub_type".to_owned(), json!(sub_type)),
+        (
+            "group_id".to_owned(),
+            id_format.value(u64::from(request.reference().group_id())),
+        ),
+        ("user_id".to_owned(), id_format.value(request.user_id())),
+        ("comment".to_owned(), json!(request.comment())),
+        ("flag".to_owned(), json!(request.reference().flag())),
+    ]);
+    if let Some(inviter_id) = request.inviter_id() {
+        object.insert("invitor_id".to_owned(), id_format.value(inviter_id));
+    }
+    Value::Object(object)
 }
 
 fn project_group_notice(

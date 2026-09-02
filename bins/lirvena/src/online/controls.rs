@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
-use account_api::{AccountActionError, AccountActionRequest};
+use account_api::{AccountActionError, AccountActionRequest, GroupRequestReference};
 use qq_control::{
     ControlRequest, friend_like, group_admin, group_ban, group_card, group_kick, group_leave,
-    group_name, group_special_title, group_whole_ban, parse_control_response,
+    group_name, group_request, group_special_title, group_whole_ban, parse_control_response,
 };
 use qq_directory::FriendEntry;
 use serde_json::{Value, json};
@@ -28,6 +28,25 @@ pub(super) async fn execute(
         let uid = directory::friend_uid(user_id, packets, pushes, friends, context).await?;
         let control = friend_like(&uid, optional_u32(params.get("times"), 1)?)
             .map_err(|_error| AccountActionError::BadParameters)?;
+        send_control(&control, packets, pushes, context).await?;
+        return Ok(json!({}));
+    }
+    if request.action() == "set_group_add_request" {
+        let flag = required_text(params.get("flag"))?;
+        let reference = GroupRequestReference::parse(flag)
+            .map_err(|_error| AccountActionError::BadParameters)?;
+        validate_request_subtype(reference, required_text(params.get("sub_type"))?)?;
+        let control = group_request(
+            reference.sequence(),
+            reference.event_type(),
+            reference.group_id(),
+            optional_bool(params.get("approve"), true)?,
+            params
+                .get("reason")
+                .and_then(Value::as_str)
+                .unwrap_or_default(),
+        )
+        .map_err(|_error| AccountActionError::BadParameters)?;
         send_control(&control, packets, pushes, context).await?;
         return Ok(json!({}));
     }
@@ -76,6 +95,16 @@ pub(super) async fn execute(
     .map_err(|_error| AccountActionError::BadParameters)?;
     send_control(&control, packets, pushes, context).await?;
     Ok(json!({}))
+}
+
+fn validate_request_subtype(
+    reference: GroupRequestReference,
+    subtype: &str,
+) -> Result<(), AccountActionError> {
+    match (reference.event_type(), subtype) {
+        (1 | 22, "add") | (2, "invite") => Ok(()),
+        _ => Err(AccountActionError::BadParameters),
+    }
 }
 
 async fn target_uid(
