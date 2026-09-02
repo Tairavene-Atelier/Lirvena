@@ -2,6 +2,7 @@
 
 use qq_message::{
     GroupRecallInput, PrivateRecallInput, encode_group_recall, encode_private_recall,
+    validate_group_recall_response, validate_private_recall_response,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -61,4 +62,55 @@ fn recall_rejects_incomplete_correlations() {
         })
         .is_err()
     );
+}
+
+#[test]
+fn group_recall_response_is_bound_to_the_requested_sequence() -> TestResult {
+    let response = [0x22, 0x04, 0x0a, 0x02, 0x08, 0x2a];
+    validate_group_recall_response(&response, 42)?;
+    assert!(validate_group_recall_response(&response, 43).is_err());
+    assert!(validate_group_recall_response(&[0x08, 0x03], 42).is_err());
+    assert!(
+        validate_group_recall_response(&[0x22, 0x06, 0x0a, 0x02, 0x08, 0x2a, 0x10, 0x05], 42,)
+            .is_err()
+    );
+    Ok(())
+}
+
+#[test]
+fn private_recall_response_is_bound_to_the_requested_client_sequence() -> TestResult {
+    let response = [0x2a, 0x04, 0x1a, 0x02, 0x30, 0x2a];
+    validate_private_recall_response(&response, 42)?;
+    assert!(validate_private_recall_response(&response, 43).is_err());
+    assert!(validate_private_recall_response(&[0x08, 0x03], 42).is_err());
+    assert!(
+        validate_private_recall_response(&[0x2a, 0x06, 0x08, 0x05, 0x1a, 0x02, 0x30, 0x2a], 42,)
+            .is_err()
+    );
+    Ok(())
+}
+
+#[test]
+fn recall_response_rejects_missing_and_ambiguous_items() {
+    assert!(validate_group_recall_response(&[0x12, 0x00], 42).is_err());
+    assert!(validate_private_recall_response(&[0x12, 0x00], 42).is_err());
+    assert!(
+        validate_group_recall_response(
+            &[
+                0x22, 0x04, 0x0a, 0x02, 0x08, 0x2a, 0x22, 0x04, 0x0a, 0x02, 0x08, 0x2a,
+            ],
+            42,
+        )
+        .is_err()
+    );
+    assert!(
+        validate_private_recall_response(
+            &[
+                0x2a, 0x04, 0x1a, 0x02, 0x30, 0x2a, 0x2a, 0x04, 0x1a, 0x02, 0x30, 0x2a,
+            ],
+            42,
+        )
+        .is_err()
+    );
+    assert!(validate_group_recall_response(&vec![0; 64 * 1024 + 1], 42).is_err());
 }
