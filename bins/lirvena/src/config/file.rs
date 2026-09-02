@@ -19,6 +19,7 @@ struct FileConfig {
     installation: InstallationSection,
     profile: ProfileSection,
     accounts: Vec<AccountSection>,
+    onebot: Option<super::onebot::OneBotSection>,
 }
 
 #[derive(Deserialize)]
@@ -59,6 +60,7 @@ pub(super) fn load(path: &Path) -> Result<ProcessConfig, io::Error> {
     let raw: FileConfig =
         serde_json::from_slice(&bytes).map_err(|_| invalid_config("LIRVENA_CONFIG_PATH JSON"))?;
     let base = path.parent().unwrap_or_else(|| Path::new("."));
+    let onebot = raw.onebot.map(|section| section.load(base)).transpose()?;
     if raw.accounts.is_empty() || raw.accounts.len() > MAX_ACCOUNTS {
         return Err(invalid_config("accounts count"));
     }
@@ -110,6 +112,7 @@ pub(super) fn load(path: &Path) -> Result<ProcessConfig, io::Error> {
         profile_id: read_public_array(&resolve(base, &raw.profile.id_path), "Profile identifier")?,
         state_directory: resolve(base, &raw.installation.state_directory),
         accounts,
+        onebot,
     })
 }
 

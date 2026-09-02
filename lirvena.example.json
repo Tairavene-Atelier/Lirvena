@@ -14,6 +14,31 @@
   "profile": {
     "id_path": "secrets/profile.id"
   },
+  "onebot": {
+    "event_queue_capacity": 1024,
+    "id_format": "string",
+    "heartbeat_milliseconds": 15000,
+    "forward": {
+      "listen": "127.0.0.1:5700",
+      "access_token_path": "secrets/onebot-token",
+      "max_body_bytes": 1048576
+    },
+    "http_post": [
+      {
+        "url": "http://127.0.0.1:5701/events",
+        "secret_path": "secrets/onebot-http-secret",
+        "timeout_seconds": 15
+      }
+    ],
+    "reverse_websocket": [
+      {
+        "url": "ws://127.0.0.1:5702/onebot",
+        "access_token_path": "secrets/onebot-reverse-token",
+        "self_id": 10001000,
+        "reconnect_milliseconds": 5000
+      }
+    ]
+  },
   "accounts": [
     {
       "slot_id_path": "secrets/account-primary.id",

@@ -9,7 +9,10 @@ use zeroize::Zeroizing;
 
 mod device;
 mod file;
+mod onebot;
 mod read;
+
+pub(crate) use onebot::OneBotConfig;
 
 /// Installation-wide process configuration.
 pub(super) struct ProcessConfig {
@@ -23,6 +26,7 @@ pub(super) struct ProcessConfig {
     pub profile_id: [u8; 16],
     pub state_directory: PathBuf,
     pub accounts: Vec<AccountConfig>,
+    pub onebot: Option<OneBotConfig>,
 }
 
 /// Configuration owned by one independent QQ account runtime.

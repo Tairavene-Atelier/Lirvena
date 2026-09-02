@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
 use std::io;
 
-use account_api::{AccountEvent, AccountEventHub, AccountEventPublisher};
+use account_api::{
+    AccountActionHandle, AccountActionReceiver, AccountEvent, AccountEventHub,
+    AccountEventPublisher, account_action_channel,
+};
 use account_runtime::{
     AccountGrantRequest, AccountLocalId, AccountPhase, AccountRuntimeConfig, AccountSupervisor,
     AccountTransition, AssignedRealm, GrantAvailability, GrantPlan, ProtectiveReason,
@@ -27,6 +30,7 @@ use crate::support::now_ms;
 use crate::telemetry::{CommunityTelemetryRuntime, CommunityTelemetrySetup};
 
 const ACCOUNT_QUEUE_CAPACITY: usize = 64;
+const ACCOUNT_ACTION_QUEUE_CAPACITY: usize = 256;
 const EVENT_QUEUE_CAPACITY: usize = 1_024;
 const WATCH_QUEUE_CAPACITY: usize = 8;
 
@@ -72,6 +76,23 @@ pub(super) async fn run(config: ProcessConfig) -> Result<(), Box<dyn std::error:
     let mut supervisor = AccountSupervisor::new();
     let mut jobs = JoinSet::new();
     let mut stop_channels = BTreeMap::new();
+    let mut action_channels = BTreeMap::new();
+
+    for account_config in &config.accounts {
+        let local_id = AccountLocalId::from_bytes(account_config.account_slot_id);
+        let channel = account_action_channel(ACCOUNT_ACTION_QUEUE_CAPACITY)?;
+        action_channels.insert(local_id, channel);
+    }
+    let onebot_actions = action_channels
+        .iter()
+        .map(|(local_id, (handle, _receiver))| (*local_id, handle.clone()))
+        .collect();
+    let mut onebot_runtime = crate::onebot::start(
+        config.onebot.as_ref(),
+        account_events.subscribe(),
+        onebot_actions,
+    )
+    .await?;
 
     for account_config in &config.accounts {
         let local_id = AccountLocalId::from_bytes(account_config.account_slot_id);
@@ -90,17 +111,23 @@ pub(super) async fn run(config: ProcessConfig) -> Result<(), Box<dyn std::error:
             .assigned_realm(local_id)
             .ok_or_else(|| io::Error::other("account grant plan is incomplete"))?;
         let profile = profiles.for_realm(realm)?.profile.clone();
+        let (action_handle, action_receiver) = action_channels
+            .remove(&local_id)
+            .ok_or_else(|| io::Error::other("account action channel is missing"))?;
         let (stop_sender, stop_receiver) = watch::channel(StopDirective::Running);
         stop_channels.insert(local_id, stop_sender);
-        jobs.spawn(run_account(
-            account_config.clone(),
-            ceylith.clone(),
+        jobs.spawn(run_account(AccountTaskContext {
+            config: account_config.clone(),
+            ceylith: ceylith.clone(),
             profile,
-            handle,
-            event_publisher.clone(),
-            notification_handle.clone(),
-            stop_receiver,
-        ));
+            realm,
+            account: handle,
+            events: event_publisher.clone(),
+            notifications: notification_handle.clone(),
+            stop: stop_receiver,
+            _action_handle: action_handle,
+            actions: action_receiver,
+        }));
     }
 
     let mut first_error = supervise(
@@ -118,6 +145,11 @@ pub(super) async fn run(config: ProcessConfig) -> Result<(), Box<dyn std::error:
     }
     if let Some(telemetry) = telemetry_runtime.take() {
         telemetry.shutdown().await;
+    }
+    if let Some(onebot) = onebot_runtime.take()
+        && let Err(error) = onebot.shutdown().await
+    {
+        first_error.get_or_insert(error);
     }
     if let Err(error) = ceylith_runtime.shutdown().await {
         first_error.get_or_insert_with(|| io::Error::other(error.to_string()));
@@ -174,18 +206,35 @@ fn start_community_telemetry(
     }
 }
 
-async fn run_account(
+struct AccountTaskContext {
     config: AccountConfig,
     ceylith: InstallationClient,
     profile: LinuxNtProfile,
+    realm: AssignedRealm,
     account: account_runtime::AccountHandle,
     events: AccountEventPublisher,
     notifications: Option<NotificationHandle>,
-    mut stop: watch::Receiver<StopDirective>,
-) -> AccountCompletion {
+    stop: watch::Receiver<StopDirective>,
+    _action_handle: AccountActionHandle,
+    actions: AccountActionReceiver,
+}
+
+async fn run_account(context: AccountTaskContext) -> AccountCompletion {
+    let AccountTaskContext {
+        config,
+        ceylith,
+        profile,
+        realm,
+        account,
+        events,
+        notifications,
+        mut stop,
+        _action_handle,
+        actions,
+    } = context;
     let local_id = account.local_id();
     let outcome = tokio::select! {
-        result = flow::run(&config, &ceylith, &profile, &account, &events) => {
+        result = flow::run(&config, &ceylith, &profile, realm, &account, &events, actions) => {
             result.map_err(|error| io::Error::other(error.to_string()))
         }
         directive = wait_for_stop(&mut stop) => match directive {

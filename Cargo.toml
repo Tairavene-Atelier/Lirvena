@@ -12,6 +12,8 @@ members = [
     "crates/local-state",
     "crates/notify-runtime",
     "crates/qq-domain",
+    "crates/qq-directory",
+    "crates/qq-control",
     "crates/qq-envelope",
     "crates/qq-login",
     "crates/qq-media",

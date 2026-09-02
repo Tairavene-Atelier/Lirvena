@@ -29,6 +29,21 @@ pub(super) struct PacketContext<'a> {
     pub uin: u64,
 }
 
+impl<'a> PacketContext<'a> {
+    pub(super) fn for_account(
+        context: &'a mut super::runtime::OnlineContext<'_>,
+        push_plan: &'a PushPlan,
+    ) -> Self {
+        Self {
+            qq: context.qq,
+            push_plan,
+            profile: context.profile,
+            credential: context.credential,
+            uin: context.uin,
+        }
+    }
+}
+
 impl PacketRuntime {
     pub(super) fn new(
         profile: &LinuxNtProfile,
@@ -153,10 +168,11 @@ impl PacketRuntime {
         parse_heartbeat_response(&response).map_err(Into::into)
     }
 
-    async fn send(
+    pub(super) async fn send_with_reserve(
         &self,
         context: PacketContext<'_>,
         command: &str,
+        reserve: &[u8],
         payload: &[u8],
     ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let key = session_key(context.credential)?;
@@ -171,11 +187,20 @@ impl PacketRuntime {
                 locale_id: self.locale_id,
                 command,
                 device_guid_hex: self.device_guid_hex.as_bytes(),
-                reserve: &[],
+                reserve,
                 payload,
             },
         )
         .await
+    }
+
+    async fn send(
+        &self,
+        context: PacketContext<'_>,
+        command: &str,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        self.send_with_reserve(context, command, &[], payload).await
     }
 
     fn apply_silence(&mut self, local: Option<u32>, version: Option<u32>) {
