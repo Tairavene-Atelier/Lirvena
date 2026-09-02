@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use qq_media::{
-    MediaError, MediaPolicy, MediaReference, MediaResolver, MediaSourceKind, RemoteMediaPolicy,
+    MediaPolicy, MediaReference, MediaResolver, MediaSourceKind, RemoteMediaPolicy,
 };
 
 #[tokio::test]
@@ -37,14 +37,22 @@ async fn local_base64_and_cache_share_one_size_policy() -> Result<(), Box<dyn st
 }
 
 #[test]
-fn remote_media_is_https_allowlisted_and_explicit() -> Result<(), Box<dyn std::error::Error>> {
-    assert_eq!(
-        MediaReference::parse("http://example.com/a").err(),
-        Some(MediaError::ReferenceRejected)
+fn remote_media_supports_normal_web_urls_and_optional_policy()
+-> Result<(), Box<dyn std::error::Error>> {
+    assert!(MediaReference::parse("http://example.com/a").is_ok());
+    assert!(MediaReference::parse("https://example.com/a").is_ok());
+    assert!(RemoteMediaPolicy::public_web(Duration::ZERO).is_err());
+    assert!(
+        RemoteMediaPolicy::restricted_web([String::from("EXAMPLE.com")], Duration::from_secs(5))
+            .is_err()
     );
-    assert!(RemoteMediaPolicy::new([String::from("EXAMPLE.com")], Duration::from_secs(5)).is_err());
-    let policy =
-        RemoteMediaPolicy::new([String::from("media.example.com")], Duration::from_secs(5))?;
+    let policy = RemoteMediaPolicy::restricted_web(
+        [String::from("media.example.com")],
+        Duration::from_secs(5),
+    )?;
     assert!(MediaPolicy::new(Vec::new(), None, 1_024, Some(policy)).is_ok());
+    let public = RemoteMediaPolicy::public_web(Duration::from_secs(5))?
+        .with_denied_hosts([String::from("blocked.example.com")])?;
+    assert!(MediaPolicy::new(Vec::new(), None, 1_024, Some(public)).is_ok());
     Ok(())
 }

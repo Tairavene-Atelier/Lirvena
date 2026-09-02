@@ -42,13 +42,10 @@ impl MediaReference {
             }
             return Err(MediaError::ReferenceRejected);
         }
-        if value.starts_with("https://") {
+        if value.starts_with("https://") || value.starts_with("http://") {
             return Url::parse(value)
                 .map(Self::Remote)
                 .map_err(|_error| MediaError::ReferenceRejected);
-        }
-        if value.starts_with("http://") {
-            return Err(MediaError::ReferenceRejected);
         }
         if value.starts_with("file:") {
             let url = Url::parse(value).map_err(|_error| MediaError::ReferenceRejected)?;

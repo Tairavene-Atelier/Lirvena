@@ -18,33 +18,70 @@ const MAX_RESOLVED_ADDRESSES: usize = 16;
 /// Explicit remote-media policy; absence disables remote acquisition.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RemoteMediaPolicy {
-    allowed_hosts: BTreeSet<String>,
+    allowed_hosts: Option<BTreeSet<String>>,
+    denied_hosts: BTreeSet<String>,
     timeout: Duration,
 }
 
 impl RemoteMediaPolicy {
-    /// Builds an HTTPS allowlist.
+    /// Allows normal HTTP and HTTPS media on public destinations.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for a timeout outside one second through two minutes.
+    pub fn public_web(timeout: Duration) -> Result<Self, MediaError> {
+        validate_timeout(timeout)?;
+        Ok(Self {
+            allowed_hosts: None,
+            denied_hosts: BTreeSet::new(),
+            timeout,
+        })
+    }
+
+    /// Applies an optional operator host allowlist to normal web media.
+    ///
+    /// This is not used by default and is unrelated to `OneBot` action availability.
     ///
     /// # Errors
     ///
     /// Returns an error for an empty/excessive host set, malformed lowercase DNS names, or a
     /// timeout outside one second through two minutes.
-    pub fn new(
+    pub fn restricted_web(
         allowed_hosts: impl IntoIterator<Item = String>,
         timeout: Duration,
     ) -> Result<Self, MediaError> {
         let allowed_hosts = allowed_hosts.into_iter().collect::<BTreeSet<_>>();
         if allowed_hosts.is_empty()
             || allowed_hosts.len() > MAX_REMOTE_HOSTS
-            || !(Duration::from_secs(1)..=Duration::from_mins(2)).contains(&timeout)
             || allowed_hosts.iter().any(|host| !valid_host(host))
         {
             return Err(MediaError::Configuration);
         }
+        validate_timeout(timeout)?;
         Ok(Self {
-            allowed_hosts,
+            allowed_hosts: Some(allowed_hosts),
+            denied_hosts: BTreeSet::new(),
             timeout,
         })
+    }
+
+    /// Adds an optional operator denylist while leaving every other public host available.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for an excessive or malformed lowercase DNS host set.
+    pub fn with_denied_hosts(
+        mut self,
+        denied_hosts: impl IntoIterator<Item = String>,
+    ) -> Result<Self, MediaError> {
+        let denied_hosts = denied_hosts.into_iter().collect::<BTreeSet<_>>();
+        if denied_hosts.len() > MAX_REMOTE_HOSTS
+            || denied_hosts.iter().any(|host| !valid_host(host))
+        {
+            return Err(MediaError::Configuration);
+        }
+        self.denied_hosts = denied_hosts;
+        Ok(self)
     }
 }
 
@@ -194,11 +231,19 @@ impl MediaResolver {
             .remote
             .as_ref()
             .ok_or(MediaError::ReferenceRejected)?;
-        if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() {
+        if !matches!(url.scheme(), "http" | "https")
+            || !url.username().is_empty()
+            || url.password().is_some()
+        {
             return Err(MediaError::RemoteRejected);
         }
         let host = url.host_str().ok_or(MediaError::RemoteRejected)?;
-        if !policy.allowed_hosts.contains(host) {
+        if policy.denied_hosts.contains(host)
+            || policy
+                .allowed_hosts
+                .as_ref()
+                .is_some_and(|allowed| !allowed.contains(host))
+        {
             return Err(MediaError::RemoteRejected);
         }
         let port = url
@@ -310,6 +355,14 @@ fn valid_host(host: &str) -> bool {
         && host.bytes().all(|byte| {
             byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'-')
         })
+}
+
+fn validate_timeout(timeout: Duration) -> Result<(), MediaError> {
+    if (Duration::from_secs(1)..=Duration::from_mins(2)).contains(&timeout) {
+        Ok(())
+    } else {
+        Err(MediaError::Configuration)
+    }
 }
 
 #[cfg(test)]
