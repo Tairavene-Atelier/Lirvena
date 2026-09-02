@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
 
 use account_api::{AccountActionError, AccountActionRequest, AccountIdentity};
-use qq_directory::{FriendEntry, encode_friend_page_request, parse_friend_page};
+use qq_directory::{
+    FriendEntry, encode_friend_page_request, encode_group_list_request, parse_friend_page,
+    parse_group_list,
+};
 use qq_message::{SendTextInput, SendTextTarget, encode_text_message, parse_send_message_response};
 use serde_json::{Value, json};
 
@@ -46,9 +49,64 @@ pub(super) async fn execute_account_action(
                     .collect(),
             ))
         }
+        "get_group_list" => get_group_list(packets, pushes, context).await,
+        "send_msg" => send_message(request, packets, pushes, friends, context).await,
         "send_group_msg" => send_group_text(request, packets, pushes, context).await,
         "send_private_msg" => send_private_text(request, packets, pushes, friends, context).await,
         _ => Err(AccountActionError::ActionNotFound),
+    }
+}
+
+async fn get_group_list(
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    context: &mut OnlineContext<'_>,
+) -> Result<Value, AccountActionError> {
+    let body = encode_group_list_request();
+    let response = packets
+        .send_with_reserve(
+            packet_context(context, pushes),
+            "OidbSvcTrpcTcp.0xfe5_2",
+            &[],
+            &body,
+        )
+        .await
+        .map_err(|_error| AccountActionError::QqFailure)?;
+    let groups = parse_group_list(&response).map_err(|_error| AccountActionError::QqFailure)?;
+    Ok(Value::Array(
+        groups
+            .into_iter()
+            .map(|group| {
+                json!({
+                    "group_id": group.group_id,
+                    "group_name": group.group_name,
+                    "member_count": group.member_count,
+                    "max_member_count": group.max_member_count,
+                })
+            })
+            .collect(),
+    ))
+}
+
+async fn send_message(
+    request: &AccountActionRequest,
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    friends: &mut BTreeMap<u32, FriendEntry>,
+    context: &mut OnlineContext<'_>,
+) -> Result<Value, AccountActionError> {
+    match request.params().get("message_type").and_then(Value::as_str) {
+        Some("private") => send_private_text(request, packets, pushes, friends, context).await,
+        Some("group") => send_group_text(request, packets, pushes, context).await,
+        Some(_) => Err(AccountActionError::BadParameters),
+        None => match (
+            request.params().contains_key("user_id"),
+            request.params().contains_key("group_id"),
+        ) {
+            (true, false) => send_private_text(request, packets, pushes, friends, context).await,
+            (false, true) => send_group_text(request, packets, pushes, context).await,
+            _ => Err(AccountActionError::BadParameters),
+        },
     }
 }
 
