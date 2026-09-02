@@ -452,6 +452,9 @@ dependencies = [
 [[package]]
 name = "qq-wire"
 version = "0.0.0"
+dependencies = [
+ "prost",
+]
 
 [[package]]
 name = "quote"
