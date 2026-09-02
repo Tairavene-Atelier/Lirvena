@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "bins/lirvena",
     "crates/account-api",
+    "crates/account-message-store",
     "crates/account-runtime",
     "crates/adapter-onebot",
     "crates/ceylith-client",

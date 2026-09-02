@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::io;
+use std::path::PathBuf;
 
 use account_api::{
     AccountActionHandle, AccountActionReceiver, AccountEvent, AccountEventHub,
@@ -118,6 +119,7 @@ pub(super) async fn run(config: ProcessConfig) -> Result<(), Box<dyn std::error:
         stop_channels.insert(local_id, stop_sender);
         jobs.spawn(run_account(AccountTaskContext {
             config: account_config.clone(),
+            state_directory: config.state_directory.clone(),
             ceylith: ceylith.clone(),
             profile,
             realm,
@@ -208,6 +210,7 @@ fn start_community_telemetry(
 
 struct AccountTaskContext {
     config: AccountConfig,
+    state_directory: PathBuf,
     ceylith: InstallationClient,
     profile: LinuxNtProfile,
     realm: AssignedRealm,
@@ -222,6 +225,7 @@ struct AccountTaskContext {
 async fn run_account(context: AccountTaskContext) -> AccountCompletion {
     let AccountTaskContext {
         config,
+        state_directory,
         ceylith,
         profile,
         realm,
@@ -234,7 +238,18 @@ async fn run_account(context: AccountTaskContext) -> AccountCompletion {
     } = context;
     let local_id = account.local_id();
     let outcome = tokio::select! {
-        result = flow::run(&config, &ceylith, &profile, realm, &account, &events, actions) => {
+        result = flow::run(
+            flow::AccountFlow {
+                config: &config,
+                state_directory: &state_directory,
+                ceylith: &ceylith,
+                profile: &profile,
+                realm,
+                account: &account,
+                events: &events,
+            },
+            actions,
+        ) => {
             result.map_err(|error| io::Error::other(error.to_string()))
         }
         directive = wait_for_stop(&mut stop) => match directive {

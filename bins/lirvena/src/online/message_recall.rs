@@ -1,10 +1,11 @@
 use account_api::{AccountActionError, AccountActionRequest};
+use account_message_store::RecallTarget;
 use qq_message::{
     GroupRecallInput, PrivateRecallInput, encode_group_recall, encode_private_recall,
 };
 use serde_json::{Value, json};
 
-use super::message_registry::{MessageRegistry, RecallTarget};
+use super::message_registry::MessageRegistry;
 use super::packets::{PacketContext, PacketRuntime};
 use super::parameters::required_u32;
 use super::push::PushRuntime;
@@ -20,9 +21,9 @@ pub(super) async fn recall_message(
     let message_id = required_u32(request.params().get("message_id"))?;
     let target = messages
         .get(message_id)
-        .cloned()
+        .map_err(|_error| AccountActionError::QqFailure)?
         .ok_or(AccountActionError::QqFailure)?;
-    let (route, body) = encode_target(&target)?;
+    let (route, body) = encode_target(target.recall())?;
     packets
         .send_with_reserve(
             PacketContext::for_account(context, pushes.plan()),
@@ -32,7 +33,9 @@ pub(super) async fn recall_message(
         )
         .await
         .map_err(|_error| AccountActionError::QqFailure)?;
-    messages.remove(message_id);
+    messages
+        .remove(message_id)
+        .map_err(|_error| AccountActionError::QqFailure)?;
     Ok(json!({}))
 }
 
@@ -68,8 +71,9 @@ fn encode_target(target: &RecallTarget) -> Result<(&'static str, Vec<u8>), Accou
 
 #[cfg(test)]
 mod tests {
-    use super::{RecallTarget, encode_target};
+    use super::encode_target;
     use account_api::AccountActionError;
+    use account_message_store::RecallTarget;
 
     #[test]
     fn unavailable_message_never_becomes_a_fake_success() {
