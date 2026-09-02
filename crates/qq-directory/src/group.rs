@@ -1,5 +1,7 @@
 use prost::Message;
 
+use crate::fields::ProtobufBoolFields;
+
 const MAX_GROUPS: usize = 10_000;
 const MAX_GROUP_TEXT_BYTES: usize = 4_096;
 
@@ -24,12 +26,10 @@ pub fn encode_group_list_request() -> Vec<u8> {
         subcommand: 2,
         body: Some(GroupRequest {
             config: Some(GroupConfig {
-                first: Some(FirstConfig {
-                    fields: true_fields(1..=32, &[5_001, 5_002, 5_003]),
-                }),
-                second: Some(SecondConfig {
-                    fields: true_fields(1..=8, &[]),
-                }),
+                first: Some(ProtobufBoolFields::enabled(
+                    (1..=32).chain([5_001, 5_002, 5_003]),
+                )),
+                second: Some(ProtobufBoolFields::enabled(1..=8)),
                 third: Some(ThirdConfig {
                     field5: true,
                     field6: true,
@@ -81,15 +81,6 @@ fn valid_text(value: &str) -> bool {
     value.len() <= MAX_GROUP_TEXT_BYTES && !value.chars().any(char::is_control)
 }
 
-fn true_fields(base: impl Iterator<Item = u32>, extras: &[u32]) -> Vec<BoolField> {
-    base.chain(extras.iter().copied())
-        .map(|number| BoolField {
-            number,
-            value: true,
-        })
-        .collect()
-}
-
 /// Opaque group-directory codec error.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GroupDirectoryError;
@@ -102,8 +93,7 @@ impl core::fmt::Display for GroupDirectoryError {
 
 impl std::error::Error for GroupDirectoryError {}
 
-// `prost` cannot express a runtime field number. Config messages below therefore use a compact
-// manual encoder embedded as message bytes rather than duplicating 45 boolean struct fields.
+// Query flags use one reusable runtime-field encoder instead of duplicating 45 boolean fields.
 #[derive(Clone, PartialEq, Message)]
 struct OidbEnvelope {
     #[prost(uint32, tag = "1")]
@@ -125,101 +115,11 @@ struct GroupRequest {
 #[derive(Clone, PartialEq, Message)]
 struct GroupConfig {
     #[prost(message, optional, tag = "1")]
-    first: Option<FirstConfig>,
+    first: Option<ProtobufBoolFields>,
     #[prost(message, optional, tag = "2")]
-    second: Option<SecondConfig>,
+    second: Option<ProtobufBoolFields>,
     #[prost(message, optional, tag = "3")]
     third: Option<ThirdConfig>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-struct FirstConfig {
-    fields: Vec<BoolField>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-struct SecondConfig {
-    fields: Vec<BoolField>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct BoolField {
-    number: u32,
-    value: bool,
-}
-
-impl Message for FirstConfig {
-    fn encode_raw(&self, buffer: &mut impl prost::bytes::BufMut) {
-        encode_fields(&self.fields, buffer);
-    }
-
-    fn merge_field(
-        &mut self,
-        tag: u32,
-        wire_type: prost::encoding::WireType,
-        buffer: &mut impl prost::bytes::Buf,
-        context: prost::encoding::DecodeContext,
-    ) -> Result<(), prost::DecodeError> {
-        merge_bool_field(&mut self.fields, tag, wire_type, buffer, context)
-    }
-
-    fn encoded_len(&self) -> usize {
-        fields_len(&self.fields)
-    }
-
-    fn clear(&mut self) {
-        self.fields.clear();
-    }
-}
-
-impl Message for SecondConfig {
-    fn encode_raw(&self, buffer: &mut impl prost::bytes::BufMut) {
-        encode_fields(&self.fields, buffer);
-    }
-
-    fn merge_field(
-        &mut self,
-        tag: u32,
-        wire_type: prost::encoding::WireType,
-        buffer: &mut impl prost::bytes::Buf,
-        context: prost::encoding::DecodeContext,
-    ) -> Result<(), prost::DecodeError> {
-        merge_bool_field(&mut self.fields, tag, wire_type, buffer, context)
-    }
-
-    fn encoded_len(&self) -> usize {
-        fields_len(&self.fields)
-    }
-
-    fn clear(&mut self) {
-        self.fields.clear();
-    }
-}
-
-fn encode_fields(fields: &[BoolField], buffer: &mut impl prost::bytes::BufMut) {
-    for field in fields {
-        prost::encoding::bool::encode(field.number, &field.value, buffer);
-    }
-}
-
-fn merge_bool_field(
-    fields: &mut Vec<BoolField>,
-    number: u32,
-    wire_type: prost::encoding::WireType,
-    buffer: &mut impl prost::bytes::Buf,
-    context: prost::encoding::DecodeContext,
-) -> Result<(), prost::DecodeError> {
-    let mut value = false;
-    prost::encoding::bool::merge(wire_type, &mut value, buffer, context)?;
-    fields.push(BoolField { number, value });
-    Ok(())
-}
-
-fn fields_len(fields: &[BoolField]) -> usize {
-    fields
-        .iter()
-        .map(|field| prost::encoding::bool::encoded_len(field.number, &field.value))
-        .sum()
 }
 
 #[derive(Clone, Copy, PartialEq, Message)]
@@ -279,12 +179,12 @@ mod tests {
             .and_then(|body| body.config)
             .ok_or(GroupDirectoryError)?;
         assert_eq!(
-            config.first.ok_or(GroupDirectoryError)?.fields,
-            true_fields(1..=32, &[5_001, 5_002, 5_003])
+            config.first.ok_or(GroupDirectoryError)?,
+            ProtobufBoolFields::enabled((1..=32).chain([5_001, 5_002, 5_003]))
         );
         assert_eq!(
-            config.second.ok_or(GroupDirectoryError)?.fields,
-            true_fields(1..=8, &[])
+            config.second.ok_or(GroupDirectoryError)?,
+            ProtobufBoolFields::enabled(1..=8)
         );
         assert_eq!(
             config.third,

@@ -29,6 +29,21 @@ pub(super) struct PacketContext<'a> {
     pub uin: u64,
 }
 
+impl<'a> PacketContext<'a> {
+    pub(super) fn for_account(
+        context: &'a mut super::runtime::OnlineContext<'_>,
+        push_plan: &'a PushPlan,
+    ) -> Self {
+        Self {
+            qq: context.qq,
+            push_plan,
+            profile: context.profile,
+            credential: context.credential,
+            uin: context.uin,
+        }
+    }
+}
+
 impl PacketRuntime {
     pub(super) fn new(
         profile: &LinuxNtProfile,

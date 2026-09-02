@@ -1,14 +1,13 @@
 use std::collections::BTreeMap;
 
 use account_api::{AccountActionError, AccountActionRequest, AccountIdentity};
-use qq_directory::{
-    FriendEntry, encode_friend_page_request, encode_group_list_request, parse_friend_page,
-    parse_group_list,
-};
+use qq_directory::FriendEntry;
 use qq_message::{SendTextInput, SendTextTarget, encode_text_message, parse_send_message_response};
 use serde_json::{Value, json};
 
+use super::directory;
 use super::packets::{PacketContext, PacketRuntime};
+use super::parameters::required_u32;
 use super::push::PushRuntime;
 use super::runtime::OnlineContext;
 use crate::opaque::{OpaqueOperation, request_reserve};
@@ -34,58 +33,30 @@ pub(super) async fn execute_account_action(
             "protocol_version": "v11",
         })),
         "can_send_image" | "can_send_record" => Ok(json!({"yes": true})),
-        "get_friend_list" => {
-            refresh_friends(packets, pushes, friends, context).await?;
-            Ok(Value::Array(
-                friends
-                    .values()
-                    .map(|friend| {
-                        json!({
-                            "user_id": friend.uin,
-                            "nickname": friend.nickname,
-                            "remark": friend.remark,
-                        })
-                    })
-                    .collect(),
-            ))
+        "get_friend_list" => directory::friend_list(packets, pushes, friends, context).await,
+        "get_group_list" => directory::group_list(packets, pushes, context).await,
+        "get_group_info" => {
+            directory::group_info(request.params().get("group_id"), packets, pushes, context).await
         }
-        "get_group_list" => get_group_list(packets, pushes, context).await,
+        "get_group_member_list" => {
+            directory::group_member_list(request.params().get("group_id"), packets, pushes, context)
+                .await
+        }
+        "get_group_member_info" => {
+            directory::group_member_info(
+                request.params().get("group_id"),
+                request.params().get("user_id"),
+                packets,
+                pushes,
+                context,
+            )
+            .await
+        }
         "send_msg" => send_message(request, packets, pushes, friends, context).await,
         "send_group_msg" => send_group_text(request, packets, pushes, context).await,
         "send_private_msg" => send_private_text(request, packets, pushes, friends, context).await,
         _ => Err(AccountActionError::ActionNotFound),
     }
-}
-
-async fn get_group_list(
-    packets: &PacketRuntime,
-    pushes: &PushRuntime,
-    context: &mut OnlineContext<'_>,
-) -> Result<Value, AccountActionError> {
-    let body = encode_group_list_request();
-    let response = packets
-        .send_with_reserve(
-            packet_context(context, pushes),
-            "OidbSvcTrpcTcp.0xfe5_2",
-            &[],
-            &body,
-        )
-        .await
-        .map_err(|_error| AccountActionError::QqFailure)?;
-    let groups = parse_group_list(&response).map_err(|_error| AccountActionError::QqFailure)?;
-    Ok(Value::Array(
-        groups
-            .into_iter()
-            .map(|group| {
-                json!({
-                    "group_id": group.group_id,
-                    "group_name": group.group_name,
-                    "member_count": group.member_count,
-                    "max_member_count": group.max_member_count,
-                })
-            })
-            .collect(),
-    ))
 }
 
 async fn send_message(
@@ -110,44 +81,6 @@ async fn send_message(
     }
 }
 
-async fn refresh_friends(
-    packets: &PacketRuntime,
-    pushes: &PushRuntime,
-    friends: &mut BTreeMap<u32, FriendEntry>,
-    context: &mut OnlineContext<'_>,
-) -> Result<(), AccountActionError> {
-    const MAX_PAGES: usize = 64;
-    let mut collected = BTreeMap::new();
-    let mut next = None;
-    for _page in 0..MAX_PAGES {
-        let body = encode_friend_page_request(next);
-        let response = packets
-            .send_with_reserve(
-                packet_context(context, pushes),
-                "OidbSvcTrpcTcp.0xfd4_1",
-                &[],
-                &body,
-            )
-            .await
-            .map_err(|_error| AccountActionError::QqFailure)?;
-        let page = parse_friend_page(&response).map_err(|_error| AccountActionError::QqFailure)?;
-        for friend in page.friends {
-            if collected.insert(friend.uin, friend).is_some() {
-                return Err(AccountActionError::QqFailure);
-            }
-        }
-        match page.next_uin {
-            Some(value) if Some(value) != next => next = Some(value),
-            Some(_) => return Err(AccountActionError::QqFailure),
-            None => {
-                *friends = collected;
-                return Ok(());
-            }
-        }
-    }
-    Err(AccountActionError::QqFailure)
-}
-
 async fn send_private_text(
     request: &AccountActionRequest,
     packets: &PacketRuntime,
@@ -157,7 +90,7 @@ async fn send_private_text(
 ) -> Result<Value, AccountActionError> {
     let uin = required_u32(request.params().get("user_id"))?;
     if !friends.contains_key(&uin) {
-        refresh_friends(packets, pushes, friends, context).await?;
+        directory::refresh_friends(packets, pushes, friends, context).await?;
     }
     let uid = friends
         .get(&uin)
@@ -220,7 +153,7 @@ async fn send_text(
     .map_err(|_error| AccountActionError::QqFailure)?;
     let response = packets
         .send_with_reserve(
-            packet_context(context, pushes),
+            PacketContext::for_account(context, pushes.plan()),
             "MessageSvc.PbSendMsg",
             &reserve,
             &body,
@@ -233,31 +166,6 @@ async fn send_text(
         return Err(AccountActionError::QqFailure);
     }
     Ok(json!({"message_id": outcome.sequence}))
-}
-
-fn packet_context<'a>(
-    context: &'a mut OnlineContext<'_>,
-    pushes: &'a PushRuntime,
-) -> PacketContext<'a> {
-    PacketContext {
-        qq: context.qq,
-        push_plan: pushes.plan(),
-        profile: context.profile,
-        credential: context.credential,
-        uin: context.uin,
-    }
-}
-
-fn required_u32(value: Option<&Value>) -> Result<u32, AccountActionError> {
-    value
-        .and_then(|value| match value {
-            Value::Number(number) => number.as_u64(),
-            Value::String(value) => value.parse().ok(),
-            _ => None,
-        })
-        .and_then(|value| u32::try_from(value).ok())
-        .filter(|value| *value != 0)
-        .ok_or(AccountActionError::BadParameters)
 }
 
 fn plain_text(
