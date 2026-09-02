@@ -59,11 +59,14 @@ fn project_message(
 ) -> Result<Value, EventProjectionError> {
     let envelope = message.envelope();
     let route = envelope.route();
-    let (message_type, user_id) = match envelope.class() {
+    let (message_type, sub_type, user_id) = match envelope.class() {
         MessageClass::Private | MessageClass::PrivateRecord | MessageClass::PrivateFile => {
-            ("private", u64::from(route.from_uin))
+            ("private", "friend", u64::from(route.from_uin))
         }
-        MessageClass::Group => ("group", u64::from(route.from_uin)),
+        MessageClass::Group => ("group", "normal", u64::from(route.from_uin)),
+        MessageClass::Temporary if route.group_uin.is_some() => {
+            ("private", "group", u64::from(route.from_uin))
+        }
         _ => return Err(EventProjectionError),
     };
     if user_id == 0 {
@@ -85,7 +88,7 @@ fn project_message(
         ),
         ("post_type".to_owned(), json!("message")),
         ("message_type".to_owned(), json!(message_type)),
-        ("sub_type".to_owned(), json!("normal")),
+        ("sub_type".to_owned(), json!(sub_type)),
         (
             "message_id".to_owned(),
             id_format.value(envelope.sequence()),
@@ -94,11 +97,27 @@ fn project_message(
         ("message".to_owned(), Value::Array(segments)),
         ("raw_message".to_owned(), json!(raw_message)),
         ("font".to_owned(), json!(0)),
+        ("sender".to_owned(), sender_json(route, user_id, id_format)),
     ]);
     if let Some(group_id) = route.group_uin {
         object.insert("group_id".to_owned(), id_format.value(u64::from(group_id)));
     }
     Ok(Value::Object(object))
+}
+
+fn sender_json(route: &qq_message::MessageRoute, user_id: u64, id_format: IdFormat) -> Value {
+    let mut sender = Map::from_iter([("user_id".to_owned(), id_format.value(user_id))]);
+    if let Some(name) = route
+        .member_name
+        .as_deref()
+        .or(route.friend_name.as_deref())
+    {
+        sender.insert("nickname".to_owned(), json!(name));
+    }
+    if let Some(name) = route.member_name.as_deref() {
+        sender.insert("card".to_owned(), json!(name));
+    }
+    Value::Object(sender)
 }
 
 fn segment_json(element: &qq_message::RichTextElement) -> Value {
