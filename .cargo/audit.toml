@@ -1,0 +1,12 @@
+[advisories]
+ignore = []
+
+[output]
+deny = ["warnings"]
+format = "terminal"
+quiet = false
+show_tree = true
+
+[yanked]
+enabled = true
+update_index = true

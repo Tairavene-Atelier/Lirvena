@@ -1,0 +1,16 @@
+[package]
+name = "qq-message"
+description = "QQ message model boundary for Lirvena."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+prost = "=0.14.4"
+sha2 = "=0.10.9"
+
+[lints]
+workspace = true

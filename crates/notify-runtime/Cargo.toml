@@ -1,0 +1,31 @@
+[package]
+name = "notify-runtime"
+description = "User notification boundary for Lirvena."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+getrandom = "=0.4.3"
+hmac = "=0.12.1"
+html-escape = "=0.2.15"
+lettre = { version = "=0.11.23", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls"] }
+local-state = { version = "=0.0.0", path = "../local-state" }
+reqwest = { version = "=0.13.4", default-features = false, features = ["json", "rustls-no-provider"] }
+rustls = { version = "=0.23.43", default-features = false, features = ["ring", "std", "tls12"] }
+rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+sha2 = "=0.10.9"
+tokio = { version = "=1.53.1", features = ["macros", "rt", "sync", "time"] }
+zeroize = "=1.9.0"
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+tokio = { version = "=1.53.1", features = ["io-util", "macros", "net", "rt"] }
+
+[lints]
+workspace = true

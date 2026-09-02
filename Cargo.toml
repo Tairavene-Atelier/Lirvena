@@ -1,0 +1,49 @@
+[workspace]
+resolver = "3"
+members = [
+    "bins/lirvena",
+    "crates/account-runtime",
+    "crates/adapter-onebot",
+    "crates/ceylith-client",
+    "crates/ceylith-crypto",
+    "crates/ceylith-protocol",
+    "crates/local-state",
+    "crates/notify-runtime",
+    "crates/qq-domain",
+    "crates/qq-envelope",
+    "crates/qq-login",
+    "crates/qq-media",
+    "crates/qq-message",
+    "crates/qq-online",
+    "crates/qq-profile",
+    "crates/qq-session",
+    "crates/qq-transport",
+    "crates/qq-wire",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.96"
+license = "AGPL-3.0-only"
+repository = "https://github.com/Tairavene-Atelier/Lirvena"
+
+[workspace.lints.rust]
+missing_docs = "deny"
+rust_2018_idioms = { level = "deny", priority = -1 }
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unwrap_used = "deny"
+
+[profile.dev]
+debug = 0
+
+[profile.test]
+debug = 0

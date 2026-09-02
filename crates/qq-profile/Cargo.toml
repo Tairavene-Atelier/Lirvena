@@ -1,0 +1,17 @@
+[package]
+name = "qq-profile"
+description = "QQ profile negotiation boundary for Lirvena."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+ceylith-protocol = { version = "=0.0.0", path = "../ceylith-protocol" }
+qq-domain = { version = "=0.0.0", path = "../qq-domain" }
+qq-wire = { version = "=0.0.0", path = "../qq-wire" }
+
+[lints]
+workspace = true

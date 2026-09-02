@@ -1,0 +1,16 @@
+[package]
+name = "qq-online"
+description = "Profile-driven QQ online packet codecs for Lirvena."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+prost = "=0.14.4"
+qq-profile = { version = "=0.0.0", path = "../qq-profile" }
+
+[lints]
+workspace = true

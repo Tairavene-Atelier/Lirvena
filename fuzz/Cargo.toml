@@ -1,0 +1,40 @@
+[package]
+name = "lirvena-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+ceylith-protocol = { version = "=0.0.0", path = "../crates/ceylith-protocol" }
+libfuzzer-sys = "=0.4.13"
+qq-online = { version = "=0.0.0", path = "../crates/qq-online" }
+qq-message = { version = "=0.0.0", path = "../crates/qq-message" }
+qq-profile = { version = "=0.0.0", path = "../crates/qq-profile" }
+
+[[bin]]
+name = "frame_decode"
+path = "fuzz_targets/frame_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "inner_decode"
+path = "fuzz_targets/inner_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "push_decode"
+path = "fuzz_targets/push_decode.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
+members = ["."]

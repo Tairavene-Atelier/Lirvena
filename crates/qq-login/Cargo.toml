@@ -1,0 +1,36 @@
+[package]
+name = "qq-login"
+description = "QQ login state boundary for Lirvena."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+qrcode = { version = "=0.14.1", default-features = false }
+qq-domain = { version = "=0.0.0", path = "../qq-domain" }
+qq-envelope = { version = "=0.0.0", path = "../qq-envelope" }
+sha2 = "=0.10.9"
+zeroize = "=1.9.0"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = "=0.10.81"
+
+[dependencies.prost]
+version = "=0.14.4"
+
+[dependencies.qq-profile]
+version = "=0.0.0"
+path = "../qq-profile"
+
+[dependencies.qq-wire]
+version = "=0.0.0"
+path = "../qq-wire"
+
+[dev-dependencies]
+ceylith-protocol = { version = "=0.0.0", path = "../ceylith-protocol" }
+
+[lints]
+workspace = true

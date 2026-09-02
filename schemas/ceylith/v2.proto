@@ -1,0 +1,233 @@
+syntax = "proto3";
+
+package ceylith.v2;
+
+enum GrantClass {
+  GRANT_CLASS_UNSPECIFIED = 0;
+  GRANT_CLASS_PUBLIC = 1;
+  GRANT_CLASS_COMMUNITY = 2;
+  GRANT_CLASS_FULL = 3;
+}
+
+enum ProfileStatus {
+  PROFILE_STATUS_UNSPECIFIED = 0;
+  PROFILE_STATUS_READY = 1;
+  PROFILE_STATUS_CLIENT_UPGRADE_REQUIRED = 2;
+  PROFILE_STATUS_UNAVAILABLE = 3;
+}
+
+enum WatchEventKind {
+  WATCH_EVENT_KIND_UNSPECIFIED = 0;
+  WATCH_EVENT_KIND_GRANT_EXPIRING = 1;
+  WATCH_EVENT_KIND_RENEWAL_PAUSED = 2;
+  WATCH_EVENT_KIND_GRANT_REVOKED = 3;
+  WATCH_EVENT_KIND_QUOTA_CHANGED = 4;
+  WATCH_EVENT_KIND_POLICY_CHANGED = 5;
+  WATCH_EVENT_KIND_PROFILE_CHANGED = 6;
+  WATCH_EVENT_KIND_MAINTENANCE = 7;
+  WATCH_EVENT_KIND_GRANT_RESTORED = 8;
+}
+
+enum RenewalState {
+  RENEWAL_STATE_UNSPECIFIED = 0;
+  RENEWAL_STATE_CURRENT = 1;
+  RENEWAL_STATE_PAUSED = 2;
+  RENEWAL_STATE_REVOKED = 3;
+}
+
+enum ActionObservationKind {
+  ACTION_OBSERVATION_KIND_UNSPECIFIED = 0;
+  ACTION_OBSERVATION_KIND_RESPONSE = 1;
+  ACTION_OBSERVATION_KIND_TRANSPORT_FAILURE = 2;
+  ACTION_OBSERVATION_KIND_TIMEOUT = 3;
+  ACTION_OBSERVATION_KIND_CANCELLED = 4;
+  ACTION_OBSERVATION_KIND_STALE_TRANSPORT = 5;
+  ACTION_OBSERVATION_KIND_LOCAL_ENCODE_FAILURE = 6;
+}
+
+enum ActionFlowStatus {
+  ACTION_FLOW_STATUS_UNSPECIFIED = 0;
+  ACTION_FLOW_STATUS_ACTION = 1;
+  ACTION_FLOW_STATUS_COMPLETE = 2;
+}
+
+message ClientRuntime {
+  uint32 runtime_abi = 1;
+  uint32 envelope_contract = 2;
+  repeated uint32 action_contracts = 3;
+  repeated uint32 source_contracts = 4;
+  uint32 platform = 5;
+  uint32 architecture = 6;
+  bytes build_digest = 7;
+}
+
+message SessionHello {
+  bytes installation_id = 1;
+  bytes installation_sign_public_key = 2;
+  bytes installation_noise_public_key = 3;
+  bytes transcript_signature = 4;
+  bytes access_token = 5;
+  ClientRuntime runtime = 6;
+  uint64 requested_feature_bits = 7;
+}
+
+message SessionWelcome {
+  bytes session_id = 1;
+  bytes runtime_lease = 2;
+  uint64 lease_expires_at_ms = 3;
+  GrantClass grant_class = 4;
+  uint32 max_full_accounts = 5;
+  uint32 max_active_installations = 6;
+  uint32 max_registered_installations = 7;
+  uint64 server_time_ms = 8;
+  uint64 policy_epoch = 9;
+  repeated uint32 accepted_contracts = 10;
+}
+
+message ProfileRequest {
+  bytes runtime_lease = 1;
+  bytes profile_id = 2;
+  bytes cached_manifest_digest = 3;
+  uint32 requested_access = 4;
+  ClientRuntime runtime = 5;
+}
+
+message ProfileDecision {
+  ProfileStatus status = 1;
+  bytes profile_id = 2;
+  uint32 required_runtime_abi = 3;
+  bytes manifest = 4;
+  bytes manifest_digest = 5;
+  bytes manifest_signature = 6;
+  uint64 expires_at_ms = 7;
+  uint64 policy_epoch = 8;
+}
+
+message OpaqueSlot {
+  uint32 slot = 1;
+  bytes value = 2;
+}
+
+message OpaqueExchangeRequest {
+  bytes runtime_lease = 1;
+  bytes exchange_id = 2;
+  bytes account_slot_id = 3;
+  uint64 generation = 4;
+  repeated OpaqueSlot slots = 5;
+  uint64 expires_at_ms = 6;
+  bytes binding_digest = 7;
+}
+
+message OpaqueExchangeResponse {
+  bytes exchange_id = 1;
+  uint64 generation = 2;
+  repeated OpaqueSlot slots = 3;
+  uint64 expires_at_ms = 4;
+  bytes binding_digest = 5;
+}
+
+message ActionFlowBegin {
+  bytes runtime_lease = 1;
+  bytes flow_id = 2;
+  bytes account_slot_id = 3;
+  uint64 login_epoch = 4;
+  uint64 online_epoch = 5;
+  uint64 transport_epoch = 6;
+  repeated OpaqueSlot inputs = 7;
+  uint64 expires_at_ms = 8;
+  bytes binding_digest = 9;
+}
+
+message ActionObservation {
+  bytes runtime_lease = 1;
+  bytes flow_id = 2;
+  bytes action_id = 3;
+  bytes action_digest = 4;
+  ActionObservationKind outcome = 5;
+  bytes payload = 6;
+  uint64 observed_at_ms = 7;
+  bytes binding_digest = 8;
+}
+
+message ActionMark {
+  uint32 slot = 1;
+  bytes value = 2;
+}
+
+message ActionDirective {
+  bytes action_id = 1;
+  bytes route_shard = 2;
+  bytes body_shard = 3;
+  uint32 envelope_contract = 4;
+  repeated ActionMark marks = 5;
+  bytes expected_body_digest = 6;
+  uint64 transport_epoch = 7;
+  uint32 response_policy = 8;
+  uint32 timeout_ms = 9;
+  bytes action_digest = 10;
+  uint32 delay_ms = 11;
+}
+
+message ActionFlowUpdate {
+  bytes flow_id = 1;
+  ActionFlowStatus status = 2;
+  ActionDirective action = 3;
+  uint64 expires_at_ms = 4;
+}
+
+message WatchRequest {
+  bytes runtime_lease = 1;
+  uint64 cursor = 2;
+  uint32 max_wait_ms = 3;
+}
+
+message WatchGrantSnapshot {
+  GrantClass grant_class = 1;
+  uint32 max_full_accounts = 2;
+  uint32 max_active_installations = 3;
+  uint64 expires_at_ms = 4;
+  RenewalState renewal_state = 5;
+  uint64 policy_epoch = 6;
+}
+
+message WatchEvent {
+  uint64 cursor = 1;
+  WatchEventKind kind = 2;
+  uint64 occurred_at_ms = 3;
+  bytes account_slot_id = 4;
+  uint32 reason_code = 5;
+  bytes payload = 6;
+  WatchGrantSnapshot grant = 7;
+}
+
+message GenericResult {
+  bool accepted = 1;
+  uint32 code = 2;
+  bytes payload = 3;
+}
+
+message ErrorFrame {
+  uint32 code = 1;
+  bool retryable = 2;
+  uint64 retry_after_ms = 3;
+  bytes incident_id = 4;
+  uint32 required_runtime_abi = 5;
+}
+
+message InnerFrame {
+  uint32 contract = 1;
+
+  oneof body {
+    ProfileRequest profile_request = 10;
+    ProfileDecision profile_decision = 11;
+    OpaqueExchangeRequest opaque_exchange_request = 12;
+    OpaqueExchangeResponse opaque_exchange_response = 13;
+    WatchRequest watch_request = 14;
+    WatchEvent watch_event = 15;
+    GenericResult generic_result = 16;
+    ActionFlowBegin action_flow_begin = 17;
+    ActionObservation action_observation = 18;
+    ActionFlowUpdate action_flow_update = 19;
+    ErrorFrame error = 63;
+  }
+}

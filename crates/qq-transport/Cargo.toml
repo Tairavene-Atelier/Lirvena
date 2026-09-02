@@ -1,0 +1,18 @@
+[package]
+name = "qq-transport"
+description = "QQ transport boundary for Lirvena."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+tokio = { version = "=1.53.1", features = ["io-util", "net", "time"] }
+
+[dev-dependencies]
+tokio = { version = "=1.53.1", features = ["io-util", "macros", "net", "rt", "time"] }
+
+[lints]
+workspace = true

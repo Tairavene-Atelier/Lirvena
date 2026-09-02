@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "guid": "1a6e4d86-d973-4d98-b395-13fcf7438f70",
+  "mac_address": "02:00:00:00:00:01",
+  "name": "Lirvena device",
+  "model": "Synthetic desktop",
+  "system_kernel": "Linux",
+  "kernel_version": "6.8.0-generic",
+  "power": {
+    "kind": "desktop"
+  }
+}

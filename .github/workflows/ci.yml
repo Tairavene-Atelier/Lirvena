@@ -1,0 +1,108 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_BUILD_JOBS: "2"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  quality:
+    name: public quality gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install Rust 1.96
+        uses: dtolnay/rust-toolchain@01ba1edad32c6f80dbcce879d3e0fa5a00b2a84e
+        with:
+          components: clippy,rustfmt
+      - name: Guard public repository inputs
+        run: python3 tools/public_repo_guard.py
+      - name: Verify public schema digest
+        run: python3 tools/schema_digest.py
+      - name: Test repository guard
+        run: python3 -m unittest discover -s tools/tests -p "test_*.py"
+      - name: Check formatting
+        run: cargo fmt --all --check
+      - name: Run strict clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Run workspace tests
+        run: cargo test --workspace --locked
+
+  dependencies:
+    name: dependency policy and SBOM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install Rust 1.96
+        uses: dtolnay/rust-toolchain@01ba1edad32c6f80dbcce879d3e0fa5a00b2a84e
+      - name: Check dependency policy
+        uses: EmbarkStudios/cargo-deny-action@c3bbe7e4e3f7baeee1a3dd9aec0a3b2aded580fb
+        with:
+          command: check
+          manifest-path: Cargo.toml
+          rust-version: 1.96.0
+      - name: Check fuzz dependency policy
+        uses: EmbarkStudios/cargo-deny-action@c3bbe7e4e3f7baeee1a3dd9aec0a3b2aded580fb
+        with:
+          command: check
+          manifest-path: fuzz/Cargo.toml
+          rust-version: 1.96.0
+      - name: Install audited supply-chain tools
+        uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf
+        with:
+          tool: cargo-audit@0.22.2,cargo-cyclonedx@0.5.9
+          fallback: none
+      - name: Audit Rust dependencies
+        run: cargo audit
+      - name: Audit fuzz dependencies
+        run: cargo audit --file fuzz/Cargo.lock
+      - name: Generate CycloneDX SBOM
+        run: cargo cyclonedx --format json --all
+      - name: Generate fuzz CycloneDX SBOM
+        run: cargo cyclonedx --manifest-path fuzz/Cargo.toml --format json
+      - name: Upload CycloneDX SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: lirvena-cyclonedx
+          path: "**/*.cdx.json"
+          if-no-files-found: error
+          retention-days: 14
+
+  fuzz:
+    name: bounded parser fuzz compile
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned nightly Rust
+        run: rustup toolchain install nightly-2026-08-25 --profile minimal
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --version 0.13.2 --locked
+      - name: Compile outer-frame fuzzer
+        run: cargo +nightly-2026-08-25 fuzz build frame_decode
+      - name: Compile inner-frame fuzzer
+        run: cargo +nightly-2026-08-25 fuzz build inner_decode
+      - name: Compile Push codec fuzzer
+        run: cargo +nightly-2026-08-25 fuzz build push_decode

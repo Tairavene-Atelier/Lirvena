@@ -1,0 +1,21 @@
+[package]
+name = "qq-session"
+description = "Single-reader authenticated QQ session boundary for Lirvena."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+qq-envelope = { version = "=0.0.0", path = "../qq-envelope" }
+qq-transport = { version = "=0.0.0", path = "../qq-transport" }
+tokio = { version = "=1.53.1", features = ["io-util"] }
+
+[dev-dependencies]
+qq-wire = { version = "=0.0.0", path = "../qq-wire" }
+tokio = { version = "=1.53.1", features = ["io-util", "macros", "rt"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,7 @@
+/target/
+/device.json
+/fuzz/target/
+**/*.cdx.json
+__pycache__/
+*.py[cod]
+/.cargo-advisory-db/

@@ -1,0 +1,21 @@
+[package]
+name = "ceylith-protocol"
+description = "Bounded public wire contract shared by Ceylith and Lirvena."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+build = "build.rs"
+
+[dependencies]
+prost = "=0.14.4"
+sha2 = "=0.10.9"
+
+[build-dependencies]
+prost-build = "=0.14.4"
+protoc-bin-vendored = "=3.2.0"
+
+[lints]
+workspace = true
