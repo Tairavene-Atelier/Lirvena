@@ -4,9 +4,11 @@
 use prost::Message;
 use qq_wire::{decode_oidb_response, encode_oidb_request};
 
+mod essence;
 mod friend_request;
 mod group_request;
 
+pub use essence::{delete_group_essence, set_group_essence};
 pub use friend_request::friend_request;
 pub use group_request::group_request;
 

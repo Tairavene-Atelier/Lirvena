@@ -24,9 +24,23 @@ fn records_survive_restart_and_recall_fields_round_trip() -> TestResult {
             timestamp: 1_800_000_000,
         },
     )?;
-    MessageStore::open(&directory, local_id)?.put(&record)?;
+    let group_record = MessageRecord::new(
+        43,
+        1_800_000_000_001,
+        json!({"message_id": 43, "message": []}),
+        RecallTarget::Group {
+            group_code: 100,
+            sequence: 101,
+            random: Some(102),
+        },
+    )?;
+    let mut store = MessageStore::open(&directory, local_id)?;
+    store.put(&record)?;
+    store.put(&group_record)?;
+    drop(store);
     let reopened = MessageStore::open(&directory, local_id)?;
     assert_eq!(reopened.get(42)?, Some(record));
+    assert_eq!(reopened.get(43)?, Some(group_record));
     Ok(())
 }
 
@@ -72,5 +86,36 @@ fn unknown_schema_fails_closed() -> TestResult {
     connection.pragma_update(None, "user_version", 99)?;
     drop(connection);
     assert!(MessageStore::open(&directory, local_id).is_err());
+    Ok(())
+}
+
+#[test]
+fn schema_one_group_records_migrate_without_inventing_random() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let directory = root.path().join("private");
+    let local_id = AccountLocalId::from_bytes([11; 16]);
+    let record = MessageRecord::new(
+        9,
+        10,
+        json!({"message_id": 9, "message": []}),
+        RecallTarget::Group {
+            group_code: 100,
+            sequence: 200,
+            random: None,
+        },
+    )?;
+    MessageStore::open(&directory, local_id)?.put(&record)?;
+    let path = directory.join("messages-0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b.sqlite3");
+    let connection = Connection::open(&path)?;
+    connection.pragma_update(None, "user_version", 1)?;
+    drop(connection);
+
+    let reopened = MessageStore::open(&directory, local_id)?;
+    assert_eq!(reopened.get(9)?, Some(record));
+    let connection = Connection::open(path)?;
+    assert_eq!(
+        connection.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))?,
+        2
+    );
     Ok(())
 }

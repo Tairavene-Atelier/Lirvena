@@ -146,7 +146,7 @@ async fn target_uid(
     directory::member_uid(group_id, required_u32(user_id)?, packets, pushes, context).await
 }
 
-async fn send_control(
+pub(super) async fn send_control(
     request: &ControlRequest,
     packets: &PacketRuntime,
     pushes: &PushRuntime,

@@ -52,6 +52,7 @@ fn encode_target(target: &RecallTarget) -> Result<Vec<u8>, AccountActionError> {
         RecallTarget::Group {
             group_code,
             sequence,
+            ..
         } => ReadReportInput::Group {
             group_uin: u64::from(*group_code),
             sequence: *sequence,
@@ -84,6 +85,7 @@ mod tests {
             encode_target(&RecallTarget::Group {
                 group_code: 42,
                 sequence: 55,
+                random: None,
             })?,
             [0x0a, 0x04, 0x08, 0x2a, 0x10, 0x37]
         );

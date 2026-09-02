@@ -16,6 +16,8 @@ Ceylith 持有；Lirvena 不接受用户提供的 Profile 或动作材料文件�
 消息状态支持 `get_msg`；仍在保留范围内的群聊与私聊 `delete_msg` 会跨进程重启复用原始 QQ
 关联字段真实撤回，`mark_msg_as_read` 会复用同一持久关联提交 QQ 已读报告。缺少关联证据、
 已淘汰的 ID 或未确认成功的 QQ 回包都会明确失败。
+具有完整群消息关联的新记录还支持标准 `set_essence_msg` 与 `delete_essence_msg`；从旧存储
+代际迁移且缺少 random 的记录不会伪造精华操作。
 目录查询已覆盖好友、群、群成员和标准 `get_stranger_info`；公开资料响应会校验请求 QQ 号，
 且只投影有界、有效的公开字段。
 完整 OneBot 和生产部署尚未完成，因此当前版本仍不能声称已经登录或稳定在线。

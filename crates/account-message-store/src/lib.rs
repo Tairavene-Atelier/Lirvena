@@ -8,7 +8,7 @@ use local_state::open_private_wal;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 const MAX_MESSAGES: usize = 4_096;
 const MAX_JSON_BYTES: usize = 64 * 1024;
 const MAX_UID_BYTES: usize = 128;
@@ -57,6 +57,11 @@ pub enum RecallTarget {
         group_code: u32,
         /// QQ message sequence.
         sequence: u64,
+        /// QQ message random when observed in this storage generation.
+        ///
+        /// Records migrated from schema v1 retain `None` and remain valid for
+        /// recall, but cannot be used by operations that require the random.
+        random: Option<u32>,
     },
     /// Direct-message correlation.
     Private {
@@ -291,13 +296,14 @@ impl<'a> RecallFields<'a> {
             RecallTarget::Group {
                 group_code,
                 sequence,
+                random,
             } => Self {
                 kind: 1,
                 group_code: Some(*group_code),
                 uid: None,
                 sequence: Some(*sequence),
                 client_sequence: None,
-                random: None,
+                random: *random,
                 timestamp: None,
             },
             RecallTarget::Private {
@@ -344,11 +350,17 @@ impl StoredRow {
     fn into_record(self, message_id: u32) -> Result<MessageRecord, MessageStoreError> {
         let recall = match self.kind {
             0 if self.no_fields() => RecallTarget::Unavailable,
-            1 => RecallTarget::Group {
-                group_code: from_i64(self.group_code)?,
-                sequence: decode_u64(self.sequence)?,
-            },
-            2 => RecallTarget::Private {
+            1 if self.uid.is_none()
+                && self.client_sequence.is_none()
+                && self.timestamp.is_none() =>
+            {
+                RecallTarget::Group {
+                    group_code: from_i64(self.group_code)?,
+                    sequence: decode_u64(self.sequence)?,
+                    random: optional_u32(self.random)?,
+                }
+            }
+            2 if self.group_code.is_none() => RecallTarget::Private {
                 uid: self.uid.ok_or(MessageStoreError::Configuration)?,
                 sequence: decode_u64(self.sequence)?,
                 client_sequence: decode_u64(self.client_sequence)?,
@@ -396,9 +408,16 @@ fn migrate(connection: &mut Connection) -> Result<(), MessageStoreError> {
                      random INTEGER,
                      timestamp INTEGER
                  );
-                 PRAGMA user_version = 1;",
+                 PRAGMA user_version = 2;",
             )?;
             transaction.commit()?;
+            Ok(())
+        }
+        1 => {
+            // Schema v1 already reserved the random column for private
+            // correlations. Advancing the generation explicitly records that
+            // new group rows may use it; existing NULL values stay unavailable.
+            connection.pragma_update(None, "user_version", SCHEMA_VERSION)?;
             Ok(())
         }
         SCHEMA_VERSION => Ok(()),
@@ -422,7 +441,8 @@ fn valid_recall(target: &RecallTarget) -> bool {
         RecallTarget::Group {
             group_code,
             sequence,
-        } => *group_code != 0 && *sequence != 0,
+            random,
+        } => *group_code != 0 && *sequence != 0 && random.is_none_or(|value| value != 0),
         RecallTarget::Private {
             uid,
             sequence,
@@ -457,6 +477,12 @@ where
     value
         .and_then(|value| T::try_from(value).ok())
         .ok_or(MessageStoreError::Configuration)
+}
+
+fn optional_u32(value: Option<i64>) -> Result<Option<u32>, MessageStoreError> {
+    value
+        .map(|value| u32::try_from(value).map_err(|_error| MessageStoreError::Configuration))
+        .transpose()
 }
 
 fn to_i64(value: u64) -> Result<i64, MessageStoreError> {
