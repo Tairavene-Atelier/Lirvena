@@ -205,6 +205,29 @@ pub fn group_leave(group_id: u32) -> Result<ControlRequest, ControlError> {
     )
 }
 
+/// Encodes `send_like`.
+///
+/// # Errors
+///
+/// Returns an error for an invalid UID or a count outside QQ's one-call bound.
+pub fn friend_like(uid: &str, count: u32) -> Result<ControlRequest, ControlError> {
+    if count == 0 || count > 10 {
+        return Err(ControlError);
+    }
+    validate_group_uid_text(1, uid, "")?;
+    request(
+        0x07e5,
+        104,
+        "OidbSvcTrpcTcp.0x7e5_104",
+        None,
+        &FriendLikeBody {
+            uid: uid.to_owned(),
+            field12: 71,
+            count,
+        },
+    )
+}
+
 /// Validates a generic OIDB action response.
 ///
 /// # Errors
@@ -426,6 +449,16 @@ struct LeaveBody {
     group_id: u32,
 }
 
+#[derive(Clone, PartialEq, Message)]
+struct FriendLikeBody {
+    #[prost(string, tag = "11")]
+    uid: String,
+    #[prost(uint32, tag = "12")]
+    field12: u32,
+    #[prost(uint32, tag = "13")]
+    count: u32,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -453,5 +486,17 @@ mod tests {
     fn rejected_response_never_reports_success() {
         let rejected = OidbResponse { error_code: 1 }.encode_to_vec();
         assert_eq!(parse_control_response(&rejected), Err(ControlError));
+    }
+
+    #[test]
+    fn friend_like_is_bounded_and_uses_linux_uid() -> Result<(), Box<dyn std::error::Error>> {
+        let request = friend_like("u_target", 10)?;
+        let outer = OidbRequest::decode(request.body())?;
+        let body = FriendLikeBody::decode(outer.body.as_slice())?;
+        assert_eq!((outer.command, outer.subcommand), (0x07e5, 104));
+        assert_eq!(body.uid, "u_target");
+        assert_eq!(body.count, 10);
+        assert!(friend_like("u_target", 11).is_err());
+        Ok(())
     }
 }

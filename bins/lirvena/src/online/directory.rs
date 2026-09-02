@@ -72,6 +72,22 @@ pub(super) async fn refresh_friends(
     Err(AccountActionError::QqFailure)
 }
 
+pub(super) async fn friend_uid(
+    user_id: u32,
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    friends: &mut BTreeMap<u32, FriendEntry>,
+    context: &mut OnlineContext<'_>,
+) -> Result<String, AccountActionError> {
+    if !friends.contains_key(&user_id) {
+        refresh_friends(packets, pushes, friends, context).await?;
+    }
+    friends
+        .get(&user_id)
+        .map(|friend| friend.uid.clone())
+        .ok_or(AccountActionError::QqFailure)
+}
+
 pub(super) async fn group_list(
     packets: &PacketRuntime,
     pushes: &PushRuntime,

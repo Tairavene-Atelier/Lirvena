@@ -36,7 +36,7 @@ pub(super) async fn execute_account_action(
             "app_version": env!("CARGO_PKG_VERSION"),
             "protocol_version": "v11",
         })),
-        "can_send_image" | "can_send_record" => Ok(json!({"yes": true})),
+        "can_send_image" | "can_send_record" => Ok(json!({"yes": false})),
         "get_friend_list" => directory::friend_list(packets, pushes, friends, context).await,
         "get_group_list" => directory::group_list(packets, pushes, context).await,
         "get_group_info" => {
@@ -59,14 +59,21 @@ pub(super) async fn execute_account_action(
         "send_msg" => send_message(request, packets, pushes, friends, context).await,
         "send_group_msg" => send_group_text(request, packets, pushes, context).await,
         "send_private_msg" => send_private_text(request, packets, pushes, friends, context).await,
-        "set_group_kick"
+        "send_like"
+        | "set_group_kick"
         | "set_group_ban"
         | "set_group_whole_ban"
         | "set_group_admin"
         | "set_group_card"
         | "set_group_name"
         | "set_group_leave"
-        | "set_group_special_title" => controls::execute(request, packets, pushes, context).await,
+        | "set_group_special_title" => {
+            controls::execute(request, packets, pushes, friends, context).await
+        }
+        "clean_cache" => {
+            friends.clear();
+            Ok(json!({}))
+        }
         _ => Err(AccountActionError::ActionNotFound),
     }
 }

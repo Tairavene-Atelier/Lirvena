@@ -1,8 +1,11 @@
+use std::collections::BTreeMap;
+
 use account_api::{AccountActionError, AccountActionRequest};
 use qq_control::{
-    ControlRequest, group_admin, group_ban, group_card, group_kick, group_leave, group_name,
-    group_special_title, group_whole_ban, parse_control_response,
+    ControlRequest, friend_like, group_admin, group_ban, group_card, group_kick, group_leave,
+    group_name, group_special_title, group_whole_ban, parse_control_response,
 };
+use qq_directory::FriendEntry;
 use serde_json::{Value, json};
 
 use super::directory;
@@ -16,9 +19,18 @@ pub(super) async fn execute(
     request: &AccountActionRequest,
     packets: &PacketRuntime,
     pushes: &PushRuntime,
+    friends: &mut BTreeMap<u32, FriendEntry>,
     context: &mut OnlineContext<'_>,
 ) -> Result<Value, AccountActionError> {
     let params = request.params();
+    if request.action() == "send_like" {
+        let user_id = required_u32(params.get("user_id"))?;
+        let uid = directory::friend_uid(user_id, packets, pushes, friends, context).await?;
+        let control = friend_like(&uid, optional_u32(params.get("times"), 1)?)
+            .map_err(|_error| AccountActionError::BadParameters)?;
+        send_control(&control, packets, pushes, context).await?;
+        return Ok(json!({}));
+    }
     let group_id = required_u32(params.get("group_id"))?;
     let control = match request.action() {
         "set_group_kick" => {
