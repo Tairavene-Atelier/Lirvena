@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 
 use super::controls;
 use super::directory;
+use super::essence;
 use super::message_recall::recall_message;
 use super::message_registry::{MessageRegistry, OutboundCorrelations};
 use super::packets::{PacketContext, PacketRuntime};
@@ -89,6 +90,12 @@ pub(super) async fn execute_account_action(
         }
         "delete_msg" => recall_message(request, packets, pushes, messages, context).await,
         "mark_msg_as_read" => mark_message_read(request, packets, pushes, messages, context).await,
+        "set_essence_msg" => {
+            essence::update(request, true, packets, pushes, messages, context).await
+        }
+        "delete_essence_msg" => {
+            essence::update(request, false, packets, pushes, messages, context).await
+        }
         "send_like"
         | "set_group_kick"
         | "set_group_ban"

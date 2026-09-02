@@ -34,6 +34,7 @@ impl MessageRegistry {
                     RecallTarget::Group {
                         group_code,
                         sequence: envelope.sequence(),
+                        random: wire_u32(envelope.random()).filter(|value| *value != 0),
                     }
                 }),
             MessageClass::Private => private_inbound(envelope),
@@ -70,6 +71,7 @@ impl MessageRegistry {
                 RecallTarget::Group {
                     group_code: *group_code,
                     sequence: u64::from(correlations.sequence),
+                    random: (correlations.random != 0).then_some(correlations.random),
                 }
             }
             SendTextTarget::Private { uid, .. }
@@ -207,6 +209,7 @@ mod tests {
             &RecallTarget::Group {
                 group_code: 100,
                 sequence: 90,
+                random: Some(70),
             }
         );
         Ok(())

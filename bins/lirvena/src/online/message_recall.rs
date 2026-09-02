@@ -83,6 +83,7 @@ fn encode_target(target: &RecallTarget) -> Result<EncodedRecall, AccountActionEr
         RecallTarget::Group {
             group_code,
             sequence,
+            ..
         } => encode_group_recall(GroupRecallInput {
             group_uin: u64::from(*group_code),
             sequence: *sequence,
@@ -139,6 +140,7 @@ mod tests {
         let group = encode_target(&RecallTarget::Group {
             group_code: 12,
             sequence: 34,
+            random: Some(56),
         })?;
         assert_eq!(group.response, RecallResponse::Group { sequence: 34 });
 
