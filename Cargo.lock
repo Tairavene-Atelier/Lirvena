@@ -1078,6 +1078,7 @@ dependencies = [
  "getrandom 0.4.3",
  "local-state",
  "notify-runtime",
+ "qq-control",
  "qq-directory",
  "qq-domain",
  "qq-envelope",
@@ -1456,6 +1457,13 @@ name = "protoc-bin-vendored-win32"
 version = "3.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95067976aca6421a523e491fce939a3e65249bac4b977adee0ee9771568e8aa3"
+
+[[package]]
+name = "qq-control"
+version = "0.0.0"
+dependencies = [
+ "prost",
+]
 
 [[package]]
 name = "qq-directory"

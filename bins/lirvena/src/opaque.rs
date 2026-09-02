@@ -21,6 +21,10 @@ impl OpaqueOperation {
     pub(crate) const A: Self = Self(1);
     pub(crate) const B: Self = Self(2);
     pub(crate) const C: Self = Self(3);
+
+    pub(crate) const fn numeric(value: u32) -> Self {
+        Self(value)
+    }
 }
 
 pub(crate) async fn request_reserve(

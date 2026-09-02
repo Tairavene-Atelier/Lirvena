@@ -134,6 +134,21 @@ pub(super) async fn group_member_info(
         .ok_or(AccountActionError::QqFailure)
 }
 
+pub(super) async fn member_uid(
+    group_id: u32,
+    user_id: u32,
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    context: &mut OnlineContext<'_>,
+) -> Result<String, AccountActionError> {
+    fetch_group_members(group_id, packets, pushes, context)
+        .await?
+        .into_iter()
+        .find(|member| member.uin == user_id)
+        .map(|member| member.uid)
+        .ok_or(AccountActionError::QqFailure)
+}
+
 async fn fetch_groups(
     packets: &PacketRuntime,
     pushes: &PushRuntime,

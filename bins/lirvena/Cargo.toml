@@ -21,6 +21,7 @@ local-state = { version = "=0.0.0", path = "../../crates/local-state" }
 notify-runtime = { version = "=0.0.0", path = "../../crates/notify-runtime" }
 qq-envelope = { version = "=0.0.0", path = "../../crates/qq-envelope" }
 qq-domain = { version = "=0.0.0", path = "../../crates/qq-domain" }
+qq-control = { version = "=0.0.0", path = "../../crates/qq-control" }
 qq-directory = { version = "=0.0.0", path = "../../crates/qq-directory" }
 qq-login = { version = "=0.0.0", path = "../../crates/qq-login" }
 qq-message = { version = "=0.0.0", path = "../../crates/qq-message" }

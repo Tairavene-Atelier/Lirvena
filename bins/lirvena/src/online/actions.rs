@@ -5,6 +5,7 @@ use qq_directory::FriendEntry;
 use qq_message::{SendTextInput, SendTextTarget, encode_text_message, parse_send_message_response};
 use serde_json::{Value, json};
 
+use super::controls;
 use super::directory;
 use super::packets::{PacketContext, PacketRuntime};
 use super::parameters::required_u32;
@@ -55,6 +56,14 @@ pub(super) async fn execute_account_action(
         "send_msg" => send_message(request, packets, pushes, friends, context).await,
         "send_group_msg" => send_group_text(request, packets, pushes, context).await,
         "send_private_msg" => send_private_text(request, packets, pushes, friends, context).await,
+        "set_group_kick"
+        | "set_group_ban"
+        | "set_group_whole_ban"
+        | "set_group_admin"
+        | "set_group_card"
+        | "set_group_name"
+        | "set_group_leave"
+        | "set_group_special_title" => controls::execute(request, packets, pushes, context).await,
         _ => Err(AccountActionError::ActionNotFound),
     }
 }
