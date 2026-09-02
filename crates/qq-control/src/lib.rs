@@ -4,8 +4,10 @@
 use prost::Message;
 use qq_wire::{decode_oidb_response, encode_oidb_request};
 
+mod friend_request;
 mod group_request;
 
+pub use friend_request::friend_request;
 pub use group_request::group_request;
 
 const MAX_UID_BYTES: usize = 128;
@@ -272,7 +274,7 @@ fn member_text_request(
     )
 }
 
-fn request(
+pub(crate) fn request(
     command: u32,
     subcommand: u32,
     route: &'static str,
@@ -304,6 +306,14 @@ pub(crate) fn request_reserved(
 
 fn validate_group(group_id: u32) -> Result<(), ControlError> {
     if group_id == 0 {
+        Err(ControlError)
+    } else {
+        Ok(())
+    }
+}
+
+pub(crate) fn validate_uid(uid: &str) -> Result<(), ControlError> {
+    if uid.is_empty() || uid.len() > MAX_UID_BYTES || uid.chars().any(char::is_control) {
         Err(ControlError)
     } else {
         Ok(())

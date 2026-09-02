@@ -2,10 +2,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use account_api::AccountActionError;
 use qq_directory::{
-    FriendEntry, GroupEntry, GroupMember, GroupMemberRole, GroupRequestRecord,
-    encode_friend_page_request, encode_group_list_request, encode_group_member_page_request,
-    encode_group_request_list_request, encode_user_lookup_request, parse_friend_page,
-    parse_group_list, parse_group_member_page, parse_group_request_list, parse_user_lookup,
+    FriendEntry, FriendRequestRecord, GroupEntry, GroupMember, GroupMemberRole, GroupRequestRecord,
+    encode_friend_page_request, encode_friend_request_list_request, encode_group_list_request,
+    encode_group_member_page_request, encode_group_request_list_request,
+    encode_user_lookup_request, parse_friend_page, parse_friend_request_list, parse_group_list,
+    parse_group_member_page, parse_group_request_list, parse_user_lookup,
 };
 use serde_json::{Value, json};
 
@@ -192,6 +193,25 @@ pub(super) async fn group_requests(
         .await
         .map_err(|_error| AccountActionError::QqFailure)?;
     parse_group_request_list(&response).map_err(|_error| AccountActionError::QqFailure)
+}
+
+pub(super) async fn friend_requests(
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    context: &mut OnlineContext<'_>,
+) -> Result<Vec<FriendRequestRecord>, AccountActionError> {
+    let body = encode_friend_request_list_request(context.credential.uid())
+        .map_err(|_error| AccountActionError::QqFailure)?;
+    let response = packets
+        .send_with_reserve(
+            PacketContext::for_account(context, pushes.plan()),
+            "OidbSvcTrpcTcp.0x5cf_11",
+            &[],
+            &body,
+        )
+        .await
+        .map_err(|_error| AccountActionError::QqFailure)?;
+    parse_friend_request_list(&response).map_err(|_error| AccountActionError::QqFailure)
 }
 
 pub(super) async fn uid_uin(

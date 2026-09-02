@@ -1,6 +1,6 @@
 use account_api::{
-    AccountEvent, GroupRequestKind, InboundMessage, ResolvedGroupNotice, ResolvedGroupNoticeKind,
-    ResolvedGroupRequest,
+    AccountEvent, GroupRequestKind, InboundMessage, ResolvedFriendRequest, ResolvedGroupNotice,
+    ResolvedGroupNoticeKind, ResolvedGroupRequest,
 };
 use account_runtime::AccountPhase;
 use qq_message::{MemberDecreaseKind, MemberIncreaseKind, MentionTarget, MessageClass, Segment};
@@ -52,10 +52,25 @@ pub fn project_account_event(
         AccountEvent::Message(message) => project_message(message, id_format).map(Some),
         AccountEvent::GroupNotice(notice) => project_group_notice(notice, id_format).map(Some),
         AccountEvent::GroupRequest(request) => Ok(Some(project_group_request(request, id_format))),
+        AccountEvent::FriendRequest(request) => {
+            Ok(Some(project_friend_request(request, id_format)))
+        }
         AccountEvent::OutboundMessageAccepted { .. } | AccountEvent::GroupCountObserved { .. } => {
             Ok(None)
         }
     }
+}
+
+fn project_friend_request(request: &ResolvedFriendRequest, id_format: IdFormat) -> Value {
+    json!({
+        "time": request.occurred_at(),
+        "self_id": id_format.value(request.account().qq_id()),
+        "post_type": "request",
+        "request_type": "friend",
+        "user_id": id_format.value(request.user_id()),
+        "comment": request.comment(),
+        "flag": request.reference().flag(),
+    })
 }
 
 fn project_group_request(request: &ResolvedGroupRequest, id_format: IdFormat) -> Value {

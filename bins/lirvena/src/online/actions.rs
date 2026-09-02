@@ -68,7 +68,8 @@ pub(super) async fn execute_account_action(
         | "set_group_name"
         | "set_group_leave"
         | "set_group_special_title"
-        | "set_group_add_request" => {
+        | "set_group_add_request"
+        | "set_friend_add_request" => {
             controls::execute(request, packets, pushes, friends, context).await
         }
         "clean_cache" => {

@@ -1,8 +1,9 @@
 //! Evidence-preserving `OneBot` message-event projection contracts.
 
 use account_api::{
-    AccountEvent, AccountIdentity, GroupRequestKind, GroupRequestReference, InboundMessage,
-    ResolvedGroupNotice, ResolvedGroupNoticeKind, ResolvedGroupRequest,
+    AccountEvent, AccountIdentity, FriendRequestReference, GroupRequestKind, GroupRequestReference,
+    InboundMessage, ResolvedFriendRequest, ResolvedGroupNotice, ResolvedGroupNoticeKind,
+    ResolvedGroupRequest,
 };
 use account_runtime::AccountLocalId;
 use adapter_onebot::{IdFormat, project_account_event};
@@ -44,6 +45,24 @@ fn group_request_projects_actionable_opaque_flag() -> TestResult {
         GroupRequestReference::parse(projected["flag"].as_str().ok_or("flag")?)?,
         reference
     );
+    Ok(())
+}
+
+#[test]
+fn friend_request_projects_standard_actionable_fields() -> Result<(), Box<dyn std::error::Error>> {
+    let reference = FriendRequestReference::new("u_friend".to_owned())?;
+    let event = AccountEvent::FriendRequest(Box::new(ResolvedFriendRequest::new(
+        identity()?,
+        reference.clone(),
+        42,
+        "hello".to_owned(),
+        99,
+    )?));
+    let projected = project_account_event(&event, IdFormat::String)?.ok_or("missing event")?;
+    assert_eq!(projected["post_type"], "request");
+    assert_eq!(projected["request_type"], "friend");
+    assert_eq!(projected["user_id"], "42");
+    assert_eq!(projected["flag"], reference.flag());
     Ok(())
 }
 
