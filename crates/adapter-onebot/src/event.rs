@@ -187,7 +187,7 @@ fn project_message(
         ("sub_type".to_owned(), json!(sub_type)),
         (
             "message_id".to_owned(),
-            id_format.value(envelope.sequence()),
+            id_format.value(u64::from(message.message_id())),
         ),
         ("user_id".to_owned(), id_format.value(user_id)),
         ("message".to_owned(), Value::Array(segments)),

@@ -10,6 +10,8 @@ use serde_json::{Value, json};
 
 use super::controls;
 use super::directory;
+use super::message_recall::recall_message;
+use super::message_registry::MessageRegistry;
 use super::packets::{PacketContext, PacketRuntime};
 use super::parameters::required_u32;
 use super::push::PushRuntime;
@@ -23,6 +25,7 @@ pub(super) async fn execute_account_action(
     packets: &PacketRuntime,
     pushes: &PushRuntime,
     friends: &mut BTreeMap<u32, FriendEntry>,
+    messages: &mut MessageRegistry,
     context: &mut OnlineContext<'_>,
 ) -> Result<Value, AccountActionError> {
     match request.action() {
@@ -56,9 +59,12 @@ pub(super) async fn execute_account_action(
             )
             .await
         }
-        "send_msg" => send_message(request, packets, pushes, friends, context).await,
-        "send_group_msg" => send_group_text(request, packets, pushes, context).await,
-        "send_private_msg" => send_private_text(request, packets, pushes, friends, context).await,
+        "send_msg" => send_message(request, packets, pushes, friends, messages, context).await,
+        "send_group_msg" => send_group_text(request, packets, pushes, messages, context).await,
+        "send_private_msg" => {
+            send_private_text(request, packets, pushes, friends, messages, context).await
+        }
+        "delete_msg" => recall_message(request, packets, pushes, messages, context).await,
         "send_like"
         | "set_group_kick"
         | "set_group_ban"
@@ -85,18 +91,23 @@ async fn send_message(
     packets: &PacketRuntime,
     pushes: &PushRuntime,
     friends: &mut BTreeMap<u32, FriendEntry>,
+    messages: &mut MessageRegistry,
     context: &mut OnlineContext<'_>,
 ) -> Result<Value, AccountActionError> {
     match request.params().get("message_type").and_then(Value::as_str) {
-        Some("private") => send_private_text(request, packets, pushes, friends, context).await,
-        Some("group") => send_group_text(request, packets, pushes, context).await,
+        Some("private") => {
+            send_private_text(request, packets, pushes, friends, messages, context).await
+        }
+        Some("group") => send_group_text(request, packets, pushes, messages, context).await,
         Some(_) => Err(AccountActionError::BadParameters),
         None => match (
             request.params().contains_key("user_id"),
             request.params().contains_key("group_id"),
         ) {
-            (true, false) => send_private_text(request, packets, pushes, friends, context).await,
-            (false, true) => send_group_text(request, packets, pushes, context).await,
+            (true, false) => {
+                send_private_text(request, packets, pushes, friends, messages, context).await
+            }
+            (false, true) => send_group_text(request, packets, pushes, messages, context).await,
             _ => Err(AccountActionError::BadParameters),
         },
     }
@@ -107,6 +118,7 @@ async fn send_private_text(
     packets: &PacketRuntime,
     pushes: &PushRuntime,
     friends: &mut BTreeMap<u32, FriendEntry>,
+    messages: &mut MessageRegistry,
     context: &mut OnlineContext<'_>,
 ) -> Result<Value, AccountActionError> {
     let uin = required_u32(request.params().get("user_id"))?;
@@ -123,6 +135,7 @@ async fn send_private_text(
         &segments,
         packets,
         pushes,
+        messages,
         context,
     )
     .await
@@ -132,6 +145,7 @@ async fn send_group_text(
     request: &AccountActionRequest,
     packets: &PacketRuntime,
     pushes: &PushRuntime,
+    messages: &mut MessageRegistry,
     context: &mut OnlineContext<'_>,
 ) -> Result<Value, AccountActionError> {
     if request.params().get("at_sender").and_then(Value::as_bool) == Some(true) {
@@ -144,6 +158,7 @@ async fn send_group_text(
         &segments,
         packets,
         pushes,
+        messages,
         context,
     )
     .await
@@ -154,18 +169,22 @@ async fn send_segments(
     segments: &[CompiledSegment],
     packets: &PacketRuntime,
     pushes: &PushRuntime,
+    messages: &mut MessageRegistry,
     context: &mut OnlineContext<'_>,
 ) -> Result<Value, AccountActionError> {
     let outbound = segments
         .iter()
         .map(CompiledSegment::borrowed)
         .collect::<Vec<_>>();
+    let client_sequence = random_nonzero_u32().map_err(|_error| AccountActionError::QqFailure)?;
+    let random = random_nonzero_u32().map_err(|_error| AccountActionError::QqFailure)?;
+    let unix_seconds = now_seconds().map_err(|_error| AccountActionError::QqFailure)?;
     let body = encode_message(&SendMessageInput {
-        target,
+        target: target.clone(),
         segments: &outbound,
-        client_sequence: random_nonzero_u32().map_err(|_error| AccountActionError::QqFailure)?,
-        random: random_nonzero_u32().map_err(|_error| AccountActionError::QqFailure)?,
-        unix_seconds: now_seconds().map_err(|_error| AccountActionError::QqFailure)?,
+        client_sequence,
+        random,
+        unix_seconds,
     })
     .map_err(|_error| AccountActionError::BadParameters)?;
     let reserve = request_reserve(
@@ -190,7 +209,18 @@ async fn send_segments(
     if outcome.result != 0 {
         return Err(AccountActionError::QqFailure);
     }
-    Ok(json!({"message_id": outcome.sequence}))
+    let message_id = messages.register_outbound(
+        &target,
+        outcome.sequence,
+        client_sequence,
+        random,
+        if outcome.timestamp == 0 {
+            unix_seconds
+        } else {
+            outcome.timestamp
+        },
+    );
+    Ok(json!({"message_id": message_id}))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -147,6 +147,7 @@ fn group_message_includes_only_observed_sender_fields() -> TestResult {
     let projected = project_account_event(&event, IdFormat::String)?.ok_or("missing event")?;
     assert_eq!(projected["message_type"], "group");
     assert_eq!(projected["sub_type"], "normal");
+    assert_eq!(projected["message_id"], "9");
     assert_eq!(projected["group_id"], "88");
     assert_eq!(
         projected["sender"],
@@ -262,7 +263,7 @@ fn event(
     };
     let identity = identity()?;
     Ok(AccountEvent::Message(Box::new(InboundMessage::new(
-        identity, *envelope, None,
+        identity, 9, *envelope, None,
     ))))
 }
 

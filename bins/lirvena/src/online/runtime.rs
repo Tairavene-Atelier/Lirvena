@@ -17,6 +17,7 @@ use tokio::net::TcpStream;
 use tokio::time::sleep;
 
 use super::actions::execute_account_action;
+use super::message_registry::MessageRegistry;
 use super::notices;
 use super::packets::{PacketContext, PacketRuntime};
 use super::push::{DecodedPush, PushRuntime};
@@ -44,6 +45,7 @@ pub(crate) struct OnlineRuntime {
     identity: AccountIdentity,
     events: AccountEventPublisher,
     friends: BTreeMap<u32, FriendEntry>,
+    messages: MessageRegistry,
 }
 
 impl OnlineRuntime {
@@ -61,6 +63,7 @@ impl OnlineRuntime {
             identity,
             events,
             friends: BTreeMap::new(),
+            messages: MessageRegistry::new(),
         })
     }
 
@@ -206,6 +209,7 @@ impl OnlineRuntime {
                         &self.packets,
                         &self.pushes,
                         &mut self.friends,
+                        &mut self.messages,
                         &mut context,
                     ).await;
                     pending.complete(result);
@@ -302,12 +306,14 @@ impl OnlineRuntime {
         }
     }
 
-    fn publish_message(&self, message: super::push::DecodedMessage) {
+    fn publish_message(&mut self, message: super::push::DecodedMessage) {
         let segment_count = message.rich_text().map_or(0, |body| body.elements().len());
         let (envelope, rich_text) = message.into_parts();
         let message_class = envelope.class();
+        let message_id = self.messages.register_inbound(&envelope);
         let event = AccountEvent::Message(Box::new(InboundMessage::new(
             self.identity.clone(),
+            message_id,
             envelope,
             rich_text,
         )));
