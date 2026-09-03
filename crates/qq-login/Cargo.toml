@@ -12,7 +12,7 @@ publish = false
 qrcode = { version = "=0.14.1", default-features = false }
 qq-domain = { version = "=0.0.0", path = "../qq-domain" }
 qq-envelope = { version = "=0.0.0", path = "../qq-envelope" }
-sha2 = "=0.10.9"
+sha2 = "=0.11.0"
 zeroize = "=1.9.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
