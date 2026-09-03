@@ -11,7 +11,12 @@ publish = false
 [dependencies]
 base64 = "=0.23.1"
 futures-util = "=0.3.33"
+imagesize = { version = "=0.15.0", default-features = false, features = ["bmp", "gif", "jpeg", "png", "tiff", "webp"] }
+md-5 = "=0.10.6"
+prost = "=0.14.4"
+qq-wire = { version = "=0.0.0", path = "../qq-wire" }
 reqwest = { version = "=0.13.4", default-features = false, features = ["rustls-no-provider", "stream"] }
+sha1 = "=0.10.7"
 sha2 = "=0.10.9"
 tempfile = "=3.27.0"
 tokio = { version = "=1.53.1", features = ["fs", "io-util", "net", "process", "time"] }

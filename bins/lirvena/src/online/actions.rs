@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use super::controls;
 use super::directory;
 use super::essence;
+use super::media::MediaRuntime;
 use super::message_recall::recall_message;
 use super::message_registry::{MessageRegistry, OutboundCorrelations};
 use super::packets::{PacketContext, PacketRuntime};
@@ -22,13 +23,18 @@ use super::user_profile::stranger_info;
 use crate::opaque::{OpaqueOperation, request_reserve};
 use crate::support::{now_ms, now_seconds, random_nonzero_u32};
 
+pub(super) struct ActionResources<'a> {
+    pub(super) messages: &'a mut MessageRegistry,
+    pub(super) media: &'a mut MediaRuntime,
+}
+
 pub(super) async fn execute_account_action(
     request: &AccountActionRequest,
     identity: &AccountIdentity,
     packets: &PacketRuntime,
     pushes: &PushRuntime,
     friends: &mut BTreeMap<u32, FriendEntry>,
-    messages: &mut MessageRegistry,
+    resources: &mut ActionResources<'_>,
     context: &mut OnlineContext<'_>,
 ) -> Result<Value, AccountActionError> {
     match request.action() {
@@ -42,7 +48,8 @@ pub(super) async fn execute_account_action(
             "app_version": env!("CARGO_PKG_VERSION"),
             "protocol_version": "v11",
         })),
-        "can_send_image" | "can_send_record" => Ok(json!({"yes": false})),
+        "can_send_image" => Ok(json!({"yes": true})),
+        "can_send_record" => Ok(json!({"yes": false})),
         "get_friend_list" => directory::friend_list(packets, pushes, friends, context).await,
         "get_stranger_info" => {
             stranger_info(
@@ -72,29 +79,31 @@ pub(super) async fn execute_account_action(
             )
             .await
         }
-        "get_msg" => get_message(request, messages),
+        "get_msg" => get_message(request, resources.messages),
         "send_msg" => {
             send_message(
-                request, identity, packets, pushes, friends, messages, context,
+                request, identity, packets, pushes, friends, resources, context,
             )
             .await
         }
         "send_group_msg" => {
-            send_group_text(request, identity, packets, pushes, messages, context).await
+            send_group_text(request, identity, packets, pushes, resources, context).await
         }
         "send_private_msg" => {
             send_private_text(
-                request, identity, packets, pushes, friends, messages, context,
+                request, identity, packets, pushes, friends, resources, context,
             )
             .await
         }
-        "delete_msg" => recall_message(request, packets, pushes, messages, context).await,
-        "mark_msg_as_read" => mark_message_read(request, packets, pushes, messages, context).await,
+        "delete_msg" => recall_message(request, packets, pushes, resources.messages, context).await,
+        "mark_msg_as_read" => {
+            mark_message_read(request, packets, pushes, resources.messages, context).await
+        }
         "set_essence_msg" => {
-            essence::update(request, true, packets, pushes, messages, context).await
+            essence::update(request, true, packets, pushes, resources.messages, context).await
         }
         "delete_essence_msg" => {
-            essence::update(request, false, packets, pushes, messages, context).await
+            essence::update(request, false, packets, pushes, resources.messages, context).await
         }
         "send_like"
         | "set_group_kick"
@@ -123,18 +132,18 @@ async fn send_message(
     packets: &PacketRuntime,
     pushes: &PushRuntime,
     friends: &mut BTreeMap<u32, FriendEntry>,
-    messages: &mut MessageRegistry,
+    resources: &mut ActionResources<'_>,
     context: &mut OnlineContext<'_>,
 ) -> Result<Value, AccountActionError> {
     match request.params().get("message_type").and_then(Value::as_str) {
         Some("private") => {
             send_private_text(
-                request, identity, packets, pushes, friends, messages, context,
+                request, identity, packets, pushes, friends, resources, context,
             )
             .await
         }
         Some("group") => {
-            send_group_text(request, identity, packets, pushes, messages, context).await
+            send_group_text(request, identity, packets, pushes, resources, context).await
         }
         Some(_) => Err(AccountActionError::BadParameters),
         None => match (
@@ -143,12 +152,12 @@ async fn send_message(
         ) {
             (true, false) => {
                 send_private_text(
-                    request, identity, packets, pushes, friends, messages, context,
+                    request, identity, packets, pushes, friends, resources, context,
                 )
                 .await
             }
             (false, true) => {
-                send_group_text(request, identity, packets, pushes, messages, context).await
+                send_group_text(request, identity, packets, pushes, resources, context).await
             }
             _ => Err(AccountActionError::BadParameters),
         },
@@ -161,7 +170,7 @@ async fn send_private_text(
     packets: &PacketRuntime,
     pushes: &PushRuntime,
     friends: &mut BTreeMap<u32, FriendEntry>,
-    messages: &mut MessageRegistry,
+    resources: &mut ActionResources<'_>,
     context: &mut OnlineContext<'_>,
 ) -> Result<Value, AccountActionError> {
     let uin = required_u32(request.params().get("user_id"))?;
@@ -172,14 +181,16 @@ async fn send_private_text(
         .get(&uin)
         .map(|friend| friend.uid.clone())
         .ok_or(AccountActionError::Unsupported)?;
-    let segments = compile_segments(request, None, packets, pushes, context).await?;
+    let target = SendTextTarget::Private { uin, uid: &uid };
+    let segments =
+        compile_segments(request, &target, packets, pushes, resources.media, context).await?;
     send_segments(
-        SendTextTarget::Private { uin, uid: &uid },
+        target,
         &segments,
         identity,
         packets,
         pushes,
-        messages,
+        resources.messages,
         context,
     )
     .await
@@ -190,21 +201,23 @@ async fn send_group_text(
     identity: &AccountIdentity,
     packets: &PacketRuntime,
     pushes: &PushRuntime,
-    messages: &mut MessageRegistry,
+    resources: &mut ActionResources<'_>,
     context: &mut OnlineContext<'_>,
 ) -> Result<Value, AccountActionError> {
     if request.params().get("at_sender").and_then(Value::as_bool) == Some(true) {
         return Err(AccountActionError::Unsupported);
     }
     let group_code = required_u32(request.params().get("group_id"))?;
-    let segments = compile_segments(request, Some(group_code), packets, pushes, context).await?;
+    let target = SendTextTarget::Group { group_code };
+    let segments =
+        compile_segments(request, &target, packets, pushes, resources.media, context).await?;
     send_segments(
-        SendTextTarget::Group { group_code },
+        target,
         &segments,
         identity,
         packets,
         pushes,
-        messages,
+        resources.messages,
         context,
     )
     .await
@@ -323,6 +336,12 @@ enum CompiledSegment {
         display: String,
     },
     Face(u16),
+    Image {
+        source: String,
+        group: bool,
+        message_info: Vec<u8>,
+        compatibility: Vec<u8>,
+    },
 }
 
 impl CompiledSegment {
@@ -336,6 +355,16 @@ impl CompiledSegment {
                 display,
             },
             Self::Face(value) => OutboundSegment::Face(*value),
+            Self::Image {
+                group,
+                message_info,
+                compatibility,
+                ..
+            } => OutboundSegment::Image {
+                group: *group,
+                message_info,
+                compatibility,
+            },
         }
     }
 
@@ -345,15 +374,17 @@ impl CompiledSegment {
             Self::MentionEveryone { .. } => json!({"type": "at", "data": {"qq": "all"}}),
             Self::Mention { uin, .. } => json!({"type": "at", "data": {"qq": uin}}),
             Self::Face(value) => json!({"type": "face", "data": {"id": value}}),
+            Self::Image { source, .. } => json!({"type": "image", "data": {"file": source}}),
         }
     }
 }
 
 async fn compile_segments(
     request: &AccountActionRequest,
-    group_id: Option<u32>,
+    target: &SendTextTarget<'_>,
     packets: &PacketRuntime,
     pushes: &PushRuntime,
+    media: &mut MediaRuntime,
     context: &mut OnlineContext<'_>,
 ) -> Result<Vec<CompiledSegment>, AccountActionError> {
     let auto_escape = request
@@ -371,6 +402,10 @@ async fn compile_segments(
     let needs_members = segments.iter().any(|segment| {
         segment.kind() == "at" && segment.data().get("qq").and_then(Value::as_str) != Some("all")
     });
+    let group_id = match target {
+        SendTextTarget::Group { group_code } => Some(*group_code),
+        SendTextTarget::Private { .. } => None,
+    };
     let members = match (group_id, needs_members) {
         (Some(group_id), true) => {
             Some(directory::group_members(group_id, packets, pushes, context).await?)
@@ -378,16 +413,32 @@ async fn compile_segments(
         (None, true) => return Err(AccountActionError::Unsupported),
         (_, false) => None,
     };
-    segments
-        .iter()
-        .map(|segment| compile_segment(segment, group_id, members.as_deref()))
-        .collect()
+    let mut compiled = Vec::with_capacity(segments.len());
+    for segment in &segments {
+        compiled.push(
+            compile_segment(
+                segment,
+                target,
+                members.as_deref(),
+                packets,
+                pushes,
+                media,
+                context,
+            )
+            .await?,
+        );
+    }
+    Ok(compiled)
 }
 
-fn compile_segment(
+async fn compile_segment(
     segment: &MessageSegment,
-    group_id: Option<u32>,
+    target: &SendTextTarget<'_>,
     members: Option<&[qq_directory::GroupMember]>,
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    media: &mut MediaRuntime,
+    context: &mut OnlineContext<'_>,
 ) -> Result<CompiledSegment, AccountActionError> {
     match segment.kind() {
         "text" => segment
@@ -400,7 +451,7 @@ fn compile_segment(
             .and_then(|value| u16::try_from(value).ok())
             .map(CompiledSegment::Face)
             .ok_or(AccountActionError::BadParameters),
-        "at" if group_id.is_some() => {
+        "at" if matches!(target, SendTextTarget::Group { .. }) => {
             let target = segment
                 .data()
                 .get("qq")
@@ -423,6 +474,26 @@ fn compile_segment(
                 uin,
                 uid: member.uid.clone(),
                 display: format!("@{name}"),
+            })
+        }
+        "image" => {
+            let source = segment
+                .data()
+                .get("file")
+                .and_then(Value::as_str)
+                .ok_or(AccountActionError::BadParameters)?;
+            let image_target = match target {
+                SendTextTarget::Private { uid, .. } => qq_media::ImageTarget::Direct(uid),
+                SendTextTarget::Group { group_code } => qq_media::ImageTarget::Group(*group_code),
+            };
+            let uploaded = media
+                .upload_image(source, image_target, packets, pushes, context)
+                .await?;
+            Ok(CompiledSegment::Image {
+                source: source.to_owned(),
+                group: uploaded.group,
+                message_info: uploaded.message_info,
+                compatibility: uploaded.compatibility,
             })
         }
         _ => Err(AccountActionError::Unsupported),
