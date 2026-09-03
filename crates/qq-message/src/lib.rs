@@ -3,6 +3,7 @@
 mod decoder;
 mod error;
 mod friend_request;
+mod history;
 mod long_message;
 mod model;
 mod notice;
@@ -19,6 +20,10 @@ mod rich_text;
 pub use decoder::{MessageDecoder, MessageDisposition};
 pub use error::MessageDecodeError;
 pub use friend_request::{FriendRequestSignal, decode_friend_request_signal};
+pub use history::{
+    GROUP_HISTORY_ROUTE, HistoricalMessage, decode_group_history_response,
+    encode_group_history_request,
+};
 pub use long_message::{
     LongMessageTarget, encode_long_message_receive, encode_long_message_send,
     parse_long_message_receive, parse_long_message_send,

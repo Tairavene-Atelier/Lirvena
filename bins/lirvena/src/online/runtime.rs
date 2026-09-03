@@ -3,9 +3,7 @@ use std::io;
 use std::path::Path;
 use std::time::Duration;
 
-use account_api::{
-    AccountActionReceiver, AccountEvent, AccountEventPublisher, AccountIdentity, InboundMessage,
-};
+use account_api::{AccountActionReceiver, AccountEvent, AccountEventPublisher, AccountIdentity};
 use account_runtime::AssignedRealm;
 use ceylith_client::InstallationClient;
 use ceylith_protocol::AccountSlotId;
@@ -353,13 +351,9 @@ impl OnlineRuntime {
         let segment_count = message.rich_text().map_or(0, |body| body.elements().len());
         let (envelope, rich_text) = message.into_parts();
         let message_class = envelope.class();
-        let (message_id, recall) = self.messages.prepare_inbound(&envelope)?;
-        let reply_ids = self
-            .messages
-            .resolve_reply_ids(&envelope, rich_text.as_ref())?;
-        let message = InboundMessage::new(self.identity.clone(), message_id, envelope, rich_text)
-            .with_reply_ids(reply_ids)?;
-        self.messages.retain_inbound(&message, recall, now_ms()?)?;
+        let message =
+            self.messages
+                .retain_decoded(&self.identity, envelope, rich_text, now_ms()?)?;
         let _delivered = self
             .events
             .publish(AccountEvent::Message(Box::new(message)));

@@ -107,6 +107,18 @@ pub fn project_message_record(
     Ok(Value::Object(record))
 }
 
+/// Projects one authenticated historical message with the same shape as a live message event.
+///
+/// # Errors
+///
+/// Returns an error when the authenticated message lacks a valid `OneBot` projection.
+pub fn project_history_message(
+    message: &InboundMessage,
+    id_format: IdFormat,
+) -> Result<Value, EventProjectionError> {
+    project_message(message, id_format)
+}
+
 /// Projects one decoded QQ long-message entry to a standard `OneBot` forward node.
 ///
 /// # Errors

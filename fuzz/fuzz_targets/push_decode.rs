@@ -2,14 +2,18 @@
 
 use libfuzzer_sys::fuzz_target;
 use qq_message::{
-    MessageDecoder, MessageDisposition, decode_group_reaction, decode_rich_text,
-    parse_long_message_receive, parse_long_message_send,
+    MessageDecoder, MessageDisposition, decode_group_history_response, decode_group_reaction,
+    decode_rich_text, parse_long_message_receive, parse_long_message_send,
 };
 use qq_online::{OnlineSyncState, PushProcessor};
 use qq_profile::{PushBehavior, PushPlanEntry};
 
 fuzz_target!(|data: &[u8]| {
     let (selector, body) = data.split_first().unwrap_or((&0, &[]));
+    if selector & 16 != 0 {
+        let _result = decode_group_history_response(body, 1, 1, 1);
+        return;
+    }
     if selector & 8 != 0 {
         if selector & 1 == 0 {
             let _result = parse_long_message_receive(body);

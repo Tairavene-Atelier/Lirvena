@@ -89,6 +89,17 @@ pub(super) async fn execute_account_action(
         "get_forward_msg" => {
             super::long_message::get_forward_message(request, packets, pushes, context).await
         }
+        "get_group_msg_history" => {
+            super::history::group(
+                request,
+                identity,
+                packets,
+                pushes,
+                resources.messages,
+                context,
+            )
+            .await
+        }
         "send_group_forward_msg" => {
             super::long_message::send_group_forward_message(
                 request, identity, packets, pushes, resources, context,
