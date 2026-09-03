@@ -136,6 +136,25 @@ pub struct SendMessageInput<'a> {
     pub unix_seconds: u32,
 }
 
+/// Bounded input for one synthetic entry inside a merged-forward upload.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ForwardEntryInput<'a> {
+    /// Numeric identity displayed as the entry sender.
+    pub sender_uin: u32,
+    /// Display name shown for the entry sender.
+    pub sender_name: &'a str,
+    /// Current account UID used by the Linux NT direct-message envelope.
+    pub self_uid: &'a str,
+    /// Already resolved outbound elements.
+    pub segments: &'a [OutboundSegment<'a>],
+    /// Non-zero synthetic message random.
+    pub random: u32,
+    /// Non-zero synthetic server sequence.
+    pub sequence: u32,
+    /// Non-zero Unix timestamp.
+    pub unix_seconds: u32,
+}
+
 /// Parsed QQ send acknowledgement.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SendTextOutcome {
@@ -215,9 +234,101 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
     } else {
         None
     };
+    let elements = compile_elements(
+        input.segments,
+        matches!(input.target, SendTextTarget::Group { .. }),
+    )?;
+    Ok(MessageWire {
+        routing: Some(routing),
+        content: Some(ContentHead {
+            message_type: 1,
+            subtype: Some(0),
+            c2c_command: Some(0),
+        }),
+        body: Some(MessageBody {
+            rich_text: Some(RichText { elements }),
+        }),
+        client_sequence: Some(input.client_sequence),
+        random: Some(input.random),
+        control,
+    }
+    .encode_to_vec())
+}
+
+/// Encodes one synthetic common-message entry for a merged-forward upload.
+///
+/// # Errors
+///
+/// Returns an error for missing identities, unsafe display text, zero correlations, an invalid
+/// timestamp, or any invalid message segment.
+pub fn encode_forward_entry(input: &ForwardEntryInput<'_>) -> Result<Vec<u8>, MessageDecodeError> {
+    if input.sender_uin == 0
+        || !valid_uid(input.self_uid)
+        || !valid_display(input.sender_name)
+        || input.random == 0
+        || input.sequence == 0
+        || input.unix_seconds == 0
+    {
+        return Err(MessageDecodeError);
+    }
+    let elements = compile_elements(input.segments, false)?;
+    let avatar = format!(
+        "https://q.qlogo.cn/headimg_dl?dst_uin={}&spec=640&img_type=jpg",
+        input.sender_uin
+    );
+    Ok(crate::proto::PushBody {
+        response: Some(crate::proto::ResponseHead {
+            from_uin: input.sender_uin,
+            from_uid: None,
+            message_type: 0,
+            signature_map: 0,
+            to_uin: 0,
+            to_uid: Some(input.self_uid.to_owned()),
+            forward: Some(crate::proto::ResponseForward {
+                friend_name: Some(input.sender_name.to_owned()),
+            }),
+            group: None,
+        }),
+        content: Some(crate::proto::ContentHead {
+            message_type: 9,
+            sub_type: Some(4),
+            direct_command: Some(4),
+            random: Some(i64::from(input.random)),
+            sequence: Some(u64::from(input.sequence)),
+            timestamp: Some(i64::from(input.unix_seconds)),
+            package_count: Some(1),
+            package_index: Some(0),
+            division_sequence: Some(0),
+            auto_reply: 0,
+            direct_message_sequence: None,
+            message_uid: None,
+            forward: Some(crate::proto::ForwardHead {
+                field_one: Some(0),
+                field_two: Some(0),
+                field_three: Some(2),
+                encoded_value: Some(avatar.clone()),
+                avatar: Some(avatar),
+            }),
+        }),
+        body: Some(crate::proto::MessageBody {
+            rich_text: Some(RichText { elements }.encode_to_vec()),
+            content: None,
+            encrypted_content: None,
+        }),
+    }
+    .encode_to_vec())
+}
+
+fn compile_elements(
+    segments: &[OutboundSegment<'_>],
+    target_is_group: bool,
+) -> Result<Vec<Element>, MessageDecodeError> {
+    if segments.is_empty() || segments.len() > MAX_ELEMENTS {
+        return Err(MessageDecodeError);
+    }
     let mut text_bytes = 0usize;
-    let mut elements = Vec::with_capacity(input.segments.len() * 2);
-    for segment in input.segments {
+    let mut elements = Vec::with_capacity(segments.len() * 2);
+    for segment in segments {
         let produced = match segment {
             OutboundSegment::Text(value) if !value.is_empty() => {
                 text_bytes = text_bytes
@@ -307,7 +418,7 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
                 sender_uid,
                 timestamp,
                 elements,
-            } if *group == matches!(input.target, SendTextTarget::Group { .. })
+            } if *group == target_is_group
                 && *sequence != 0
                 && *message_uid != 0
                 && *sender_uin != 0
@@ -356,21 +467,7 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
     if text_bytes > MAX_TEXT_BYTES {
         return Err(MessageDecodeError);
     }
-    Ok(MessageWire {
-        routing: Some(routing),
-        content: Some(ContentHead {
-            message_type: 1,
-            subtype: Some(0),
-            c2c_command: Some(0),
-        }),
-        body: Some(MessageBody {
-            rich_text: Some(RichText { elements }),
-        }),
-        client_sequence: Some(input.client_sequence),
-        random: Some(input.random),
-        control,
-    }
-    .encode_to_vec())
+    Ok(elements)
 }
 
 fn mention_element(display: &str, kind: i32, uin: u32, uid: &str) -> Element {

@@ -2,8 +2,9 @@
 
 use prost::Message;
 use qq_message::{
-    OutboundSegment, SendMessageInput, SendTextInput, SendTextTarget, encode_message,
-    encode_text_message, parse_send_message_response,
+    ForwardEntryInput, MessageClass, MessageDecoder, MessageDisposition, OutboundSegment,
+    SendMessageInput, SendTextInput, SendTextTarget, decode_rich_text, encode_forward_entry,
+    encode_message, encode_text_message, parse_send_message_response,
 };
 
 #[test]
@@ -41,6 +42,72 @@ fn private_text_contains_uid_and_control_timestamp() -> Result<(), Box<dyn std::
             .any(|value| value == [0x08, 0x2a, 0x12, 0x01, 0x75])
     );
     assert!(encoded.ends_with(&[0x62, 0x02, 0x08, 0x0a]));
+    Ok(())
+}
+
+#[test]
+fn forward_entry_reuses_elements_and_matches_linux_fake_envelope()
+-> Result<(), Box<dyn std::error::Error>> {
+    let encoded = encode_forward_entry(&ForwardEntryInput {
+        sender_uin: 42,
+        sender_name: "Alice",
+        self_uid: "u_self",
+        segments: &[OutboundSegment::Text("hello")],
+        random: 7,
+        sequence: 8,
+        unix_seconds: 9,
+    })?;
+    let wire = TestForwardMessage::decode(encoded.as_slice())?;
+    let response = wire.response.ok_or("missing response head")?;
+    assert_eq!(response.from_uin, 42);
+    assert_eq!(response.to_uid.as_deref(), Some("u_self"));
+    assert_eq!(
+        response.forward.and_then(|value| value.friend_name),
+        Some("Alice".to_owned())
+    );
+    let content = wire.content.ok_or("missing content head")?;
+    assert_eq!(
+        (
+            content.message_type,
+            content.sub_type,
+            content.direct_command,
+            content.random,
+            content.sequence,
+            content.timestamp,
+            content.package_count,
+            content.package_index,
+            content.division_sequence,
+        ),
+        (
+            9,
+            Some(4),
+            Some(4),
+            Some(7),
+            Some(8),
+            Some(9),
+            Some(1),
+            Some(0),
+            Some(0)
+        )
+    );
+    let forward = content.forward.ok_or("missing forward head")?;
+    assert_eq!(
+        (forward.field_one, forward.field_two, forward.field_three),
+        (Some(0), Some(0), Some(2))
+    );
+    assert_eq!(forward.encoded_value, forward.avatar);
+    let MessageDisposition::New(envelope) = MessageDecoder::default().decode_embedded(&encoded)?
+    else {
+        return Err("unexpected duplicate".into());
+    };
+    assert_eq!(envelope.class(), MessageClass::Unknown(9));
+    assert_eq!(envelope.route().from_uin, 42);
+    assert_eq!(envelope.route().to_uid.as_deref(), Some("u_self"));
+    assert_eq!(envelope.route().friend_name.as_deref(), Some("Alice"));
+    assert_eq!((envelope.sub_type(), envelope.random()), (4, 7));
+    assert_eq!((envelope.sequence(), envelope.timestamp()), (8, 9));
+    let rich = decode_rich_text(envelope.payload().rich_text().ok_or("missing rich text")?)?;
+    assert_eq!(rich.elements().len(), 1);
     Ok(())
 }
 
@@ -334,6 +401,68 @@ fn group_reply_preserves_source_evidence_and_compatibility_mention()
 struct TestMessage {
     #[prost(message, optional, tag = "3")]
     body: Option<TestBody>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestForwardMessage {
+    #[prost(message, optional, tag = "1")]
+    response: Option<TestResponse>,
+    #[prost(message, optional, tag = "2")]
+    content: Option<TestContent>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestResponse {
+    #[prost(uint32, tag = "1")]
+    from_uin: u32,
+    #[prost(string, optional, tag = "6")]
+    to_uid: Option<String>,
+    #[prost(message, optional, tag = "7")]
+    forward: Option<TestResponseForward>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestResponseForward {
+    #[prost(string, optional, tag = "6")]
+    friend_name: Option<String>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestContent {
+    #[prost(uint32, tag = "1")]
+    message_type: u32,
+    #[prost(uint32, optional, tag = "2")]
+    sub_type: Option<u32>,
+    #[prost(uint32, optional, tag = "3")]
+    direct_command: Option<u32>,
+    #[prost(int64, optional, tag = "4")]
+    random: Option<i64>,
+    #[prost(uint64, optional, tag = "5")]
+    sequence: Option<u64>,
+    #[prost(int64, optional, tag = "6")]
+    timestamp: Option<i64>,
+    #[prost(int64, optional, tag = "7")]
+    package_count: Option<i64>,
+    #[prost(uint32, optional, tag = "8")]
+    package_index: Option<u32>,
+    #[prost(uint32, optional, tag = "9")]
+    division_sequence: Option<u32>,
+    #[prost(message, optional, tag = "15")]
+    forward: Option<TestForwardHead>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestForwardHead {
+    #[prost(uint32, optional, tag = "1")]
+    field_one: Option<u32>,
+    #[prost(uint32, optional, tag = "2")]
+    field_two: Option<u32>,
+    #[prost(uint32, optional, tag = "3")]
+    field_three: Option<u32>,
+    #[prost(string, optional, tag = "4")]
+    encoded_value: Option<String>,
+    #[prost(string, optional, tag = "5")]
+    avatar: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Message)]

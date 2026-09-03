@@ -5,6 +5,7 @@ mod action;
 mod backend;
 mod dispatch;
 mod event;
+mod forward;
 mod id;
 mod message;
 mod quick;
@@ -17,6 +18,7 @@ pub use dispatch::{DispatcherConfig, OneBotDispatcher};
 pub use event::{
     EventProjectionError, project_account_event, project_forward_node, project_message_record,
 };
+pub use forward::{ForwardNode, parse_forward_nodes};
 pub use id::IdFormat;
 pub use message::{MessageParseError, MessageSegment, parse_message};
 pub use response::ActionResponse;
