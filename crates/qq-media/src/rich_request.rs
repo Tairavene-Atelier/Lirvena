@@ -2,8 +2,8 @@ use prost::Message;
 
 use crate::image::valid_uid;
 use crate::image_proto::{
-    BusinessInfo, ClientMeta, CommonHead, DirectTarget, FileInfo, GroupTarget, PictureBusiness,
-    RequestHead, RichRequest, Scene, UploadInfo, UploadRequest, VideoBusiness, VoiceBusiness,
+    BusinessInfo, ClientMeta, CommonHead, DirectTarget, GroupTarget, PictureBusiness, RequestHead,
+    RichRequest, Scene, UploadInfo, UploadRequest, VideoBusiness, VoiceBusiness,
 };
 use crate::{MediaError, MediaTarget};
 
@@ -13,7 +13,7 @@ pub(crate) struct RichRequestSpec<'a> {
     pub direct_route: (&'static str, u32),
     pub group_route: (&'static str, u32),
     pub business_type: u32,
-    pub file: FileInfo,
+    pub files: Vec<UploadInfo>,
     pub picture: PictureBusiness,
     pub video: VideoBusiness,
     pub direct_voice: VoiceBusiness,
@@ -69,10 +69,7 @@ pub(crate) fn encode(spec: RichRequestSpec<'_>) -> Result<EncodedRichRequest, Me
             client: Some(ClientMeta { agent_type: 2 }),
         }),
         upload: Some(UploadRequest {
-            files: vec![UploadInfo {
-                file: Some(spec.file),
-                sub_file_type: 0,
-            }],
+            files: spec.files,
             try_fast_upload: true,
             server_sends_message: false,
             client_random_id: u64::from(spec.client_random_id),

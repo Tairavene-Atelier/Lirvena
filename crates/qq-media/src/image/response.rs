@@ -59,6 +59,7 @@ mod tests {
                 }],
                 message_info: message_info.clone(),
                 compatibility_message: vec![0x08, 0x01],
+                sub_files: Vec::new(),
             }),
         }
         .encode_to_vec();
@@ -66,8 +67,8 @@ mod tests {
         let plan = parse_image_metadata_response(&outer, &MediaTarget::Group(42))?;
         assert_eq!(plan.message_info(), message_info);
         assert_eq!(plan.compatibility_message(), [0x08, 0x01]);
-        assert!(plan.highway_extension().is_some());
-        assert_eq!(plan.command_id(), 1_004);
+        assert_eq!(plan.uploads().len(), 1);
+        assert_eq!(plan.uploads()[0].command_id(), 1_004);
         Ok(())
     }
 
@@ -84,6 +85,7 @@ mod tests {
                 ipv4: Vec::new(),
                 message_info: vec![0x08, 0x01],
                 compatibility_message: Vec::new(),
+                sub_files: Vec::new(),
             }),
         }
         .encode_to_vec();
@@ -91,7 +93,7 @@ mod tests {
         let plan = parse_image_metadata_response(&outer, &MediaTarget::Direct("u_target"))?;
         assert_eq!(plan.message_info(), [0x08, 0x01]);
         assert!(plan.compatibility_message().is_empty());
-        assert!(plan.highway_extension().is_none());
+        assert!(plan.uploads().is_empty());
         Ok(())
     }
 }

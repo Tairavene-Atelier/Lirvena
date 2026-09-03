@@ -346,6 +346,12 @@ enum CompiledSegment {
         group: bool,
         message_info: Vec<u8>,
     },
+    Video {
+        source: String,
+        group: bool,
+        message_info: Vec<u8>,
+        compatibility: Vec<u8>,
+    },
 }
 
 impl CompiledSegment {
@@ -377,6 +383,16 @@ impl CompiledSegment {
                 group: *group,
                 message_info,
             },
+            Self::Video {
+                group,
+                message_info,
+                compatibility,
+                ..
+            } => OutboundSegment::Video {
+                group: *group,
+                message_info,
+                compatibility,
+            },
         }
     }
 
@@ -388,6 +404,7 @@ impl CompiledSegment {
             Self::Face(value) => json!({"type": "face", "data": {"id": value}}),
             Self::Image { source, .. } => json!({"type": "image", "data": {"file": source}}),
             Self::Record { source, .. } => json!({"type": "record", "data": {"file": source}}),
+            Self::Video { source, .. } => json!({"type": "video", "data": {"file": source}}),
         }
     }
 }
@@ -526,6 +543,26 @@ async fn compile_segment(
                 source: source.to_owned(),
                 group: uploaded.group,
                 message_info: uploaded.message_info,
+            })
+        }
+        "video" => {
+            let source = segment
+                .data()
+                .get("file")
+                .and_then(Value::as_str)
+                .ok_or(AccountActionError::BadParameters)?;
+            let video_target = match target {
+                SendTextTarget::Private { uid, .. } => qq_media::MediaTarget::Direct(uid),
+                SendTextTarget::Group { group_code } => qq_media::MediaTarget::Group(*group_code),
+            };
+            let uploaded = media
+                .upload_video(source, video_target, packets, pushes, context)
+                .await?;
+            Ok(CompiledSegment::Video {
+                source: source.to_owned(),
+                group: uploaded.group,
+                message_info: uploaded.message_info,
+                compatibility: uploaded.compatibility,
             })
         }
         _ => Err(AccountActionError::Unsupported),

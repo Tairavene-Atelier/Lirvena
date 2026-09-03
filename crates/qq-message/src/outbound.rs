@@ -77,6 +77,15 @@ pub enum OutboundSegment<'a> {
         /// Opaque modern message information returned by QQ.
         message_info: &'a [u8],
     },
+    /// Tencent-created modern video material and optional legacy compatibility material.
+    Video {
+        /// Whether this video targets a group scene.
+        group: bool,
+        /// Opaque modern message information returned by QQ.
+        message_info: &'a [u8],
+        /// Opaque legacy video element returned by QQ.
+        compatibility: &'a [u8],
+    },
 }
 
 /// Bounded input for one ordinary QQ rich-text message.
@@ -189,6 +198,7 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
                     face: None,
                     not_online_image: None,
                     custom_face: None,
+                    video: None,
                     common: None,
                 }])
             }
@@ -213,6 +223,7 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
                 }),
                 not_online_image: None,
                 custom_face: None,
+                video: None,
                 common: None,
             }]),
             OutboundSegment::Image {
@@ -234,12 +245,23 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
                     message_info,
                 )])
             }
+            OutboundSegment::Video {
+                group,
+                message_info,
+                compatibility,
+            } if !message_info.is_empty()
+                && message_info.len() <= MAX_MEDIA_METADATA_BYTES
+                && compatibility.len() <= MAX_MEDIA_COMPATIBILITY_BYTES =>
+            {
+                Ok(video_elements(*group, message_info, compatibility))
+            }
             OutboundSegment::Text(_)
             | OutboundSegment::MentionEveryone { .. }
             | OutboundSegment::Mention { .. }
             | OutboundSegment::Face(_)
             | OutboundSegment::Image { .. }
-            | OutboundSegment::Record { .. } => Err(MessageDecodeError),
+            | OutboundSegment::Record { .. }
+            | OutboundSegment::Video { .. } => Err(MessageDecodeError),
         }?;
         elements.extend(produced);
     }
@@ -280,6 +302,7 @@ fn mention_element(display: &str, kind: i32, uin: u32, uid: &str) -> Element {
         face: None,
         not_online_image: None,
         custom_face: None,
+        video: None,
         common: None,
     }
 }
@@ -300,6 +323,7 @@ fn image_elements(group: bool, message_info: &[u8], compatibility: &[u8]) -> Vec
             face: None,
             not_online_image,
             custom_face,
+            video: None,
             common: None,
         },
         common,
@@ -312,12 +336,31 @@ fn common_media_element(business_type: u32, message_info: &[u8]) -> Element {
         face: None,
         not_online_image: None,
         custom_face: None,
+        video: None,
         common: Some(CommonElement {
             service_type: 48,
             protobuf: message_info.to_vec(),
             business_type,
         }),
     }
+}
+
+fn video_elements(group: bool, message_info: &[u8], compatibility: &[u8]) -> Vec<Element> {
+    let common = common_media_element(if group { 21 } else { 11 }, message_info);
+    if compatibility.is_empty() {
+        return vec![common];
+    }
+    vec![
+        Element {
+            text: None,
+            face: None,
+            not_online_image: None,
+            custom_face: None,
+            video: Some(compatibility.to_vec()),
+            common: None,
+        },
+        common,
+    ]
 }
 
 fn valid_uid(value: &str) -> bool {
@@ -418,6 +461,8 @@ struct Element {
     not_online_image: Option<Vec<u8>>,
     #[prost(bytes = "vec", optional, tag = "8")]
     custom_face: Option<Vec<u8>>,
+    #[prost(bytes = "vec", optional, tag = "19")]
+    video: Option<Vec<u8>>,
     #[prost(message, optional, tag = "53")]
     common: Option<CommonElement>,
 }

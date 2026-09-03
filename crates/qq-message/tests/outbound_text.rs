@@ -207,6 +207,36 @@ fn record_uses_only_the_modern_voice_business_type() -> Result<(), Box<dyn std::
     Ok(())
 }
 
+#[test]
+fn video_preserves_legacy_material_before_modern_group_element()
+-> Result<(), Box<dyn std::error::Error>> {
+    let segments = [OutboundSegment::Video {
+        group: true,
+        message_info: &[0x08, 0x01],
+        compatibility: &[0x10, 0x02],
+    }];
+    let encoded = encode_message(&SendMessageInput {
+        target: SendTextTarget::Group { group_code: 7 },
+        segments: &segments,
+        client_sequence: 8,
+        random: 9,
+        unix_seconds: 10,
+    })?;
+    let elements = TestMessage::decode(encoded.as_slice())?
+        .body
+        .and_then(|body| body.rich_text)
+        .ok_or("missing rich text")?
+        .elements;
+    assert_eq!(elements.len(), 2);
+    assert_eq!(elements[0].video.as_deref(), Some(&[0x10, 0x02][..]));
+    let common = elements[1]
+        .common
+        .as_ref()
+        .ok_or("missing common element")?;
+    assert_eq!((common.service_type, common.business_type), (48, 21));
+    Ok(())
+}
+
 #[derive(Clone, PartialEq, Message)]
 struct TestMessage {
     #[prost(message, optional, tag = "3")]
@@ -235,6 +265,8 @@ struct TestElement {
     not_online_image: Option<Vec<u8>>,
     #[prost(bytes = "vec", optional, tag = "8")]
     custom_face: Option<Vec<u8>>,
+    #[prost(bytes = "vec", optional, tag = "19")]
+    video: Option<Vec<u8>>,
     #[prost(message, optional, tag = "53")]
     common: Option<TestCommon>,
 }

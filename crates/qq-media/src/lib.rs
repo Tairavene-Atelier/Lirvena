@@ -12,6 +12,7 @@ mod resolver;
 mod rich_request;
 mod target;
 mod upload;
+mod video;
 
 pub use error::MediaError;
 pub use ffmpeg::{AudioFormat, FfmpegTranscoder, TranscodePolicy};
@@ -28,3 +29,7 @@ pub use reference::MediaReference;
 pub use resolver::{MediaPolicy, MediaResolver, RemoteMediaPolicy};
 pub use target::MediaTarget;
 pub use upload::RichMediaUploadPlan;
+pub use video::{
+    VideoDescriptor, VideoMetadataRequest, analyze_video, default_video_thumbnail,
+    encode_video_metadata_request, parse_video_metadata_response,
+};
