@@ -132,7 +132,10 @@ pub(super) async fn execute_account_action(
         "delete_essence_msg" => {
             essence::update(request, false, packets, pushes, resources.messages, context).await
         }
-        "send_like"
+        "send_poke"
+        | "group_poke"
+        | "friend_poke"
+        | "send_like"
         | "set_group_kick"
         | "set_group_ban"
         | "set_group_whole_ban"
