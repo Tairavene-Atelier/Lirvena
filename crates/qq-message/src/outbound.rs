@@ -2,6 +2,8 @@ use prost::Message;
 
 use crate::MessageDecodeError;
 
+mod rich;
+
 const MAX_TEXT_BYTES: usize = 4_500;
 const MAX_ELEMENTS: usize = 256;
 const MAX_DISPLAY_BYTES: usize = 1_024;
@@ -85,6 +87,22 @@ pub enum OutboundSegment<'a> {
         message_info: &'a [u8],
         /// Opaque legacy video element returned by QQ.
         compatibility: &'a [u8],
+    },
+    /// One compressed light-application JSON payload.
+    Json(&'a str),
+    /// One compressed XML rich-message payload.
+    Xml {
+        /// XML body.
+        body: &'a str,
+        /// QQ rich-message service identifier.
+        service_id: i32,
+    },
+    /// One QQ shake/poke element.
+    Poke {
+        /// Poke kind.
+        kind: u32,
+        /// Poke strength.
+        strength: u32,
     },
 }
 
@@ -195,11 +213,7 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
                         value: Some((*value).to_owned()),
                         reserve: None,
                     }),
-                    face: None,
-                    not_online_image: None,
-                    custom_face: None,
-                    video: None,
-                    common: None,
+                    ..Element::default()
                 }])
             }
             OutboundSegment::MentionEveryone { display } if valid_display(display) => {
@@ -217,14 +231,10 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
                 Ok(vec![mention_element(display, 2, *uin, uid)])
             }
             OutboundSegment::Face(id) if *id < 260 => Ok(vec![Element {
-                text: None,
                 face: Some(Face {
                     index: Some(i32::from(*id)),
                 }),
-                not_online_image: None,
-                custom_face: None,
-                video: None,
-                common: None,
+                ..Element::default()
             }]),
             OutboundSegment::Image {
                 group,
@@ -255,13 +265,34 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
             {
                 Ok(video_elements(*group, message_info, compatibility))
             }
+            OutboundSegment::Json(body) => Ok(vec![Element {
+                light_app: Some(LightApp {
+                    data: rich::compressed_payload(body)?,
+                    resource_id: None,
+                }),
+                ..Element::default()
+            }]),
+            OutboundSegment::Xml { body, service_id } if *service_id > 0 => Ok(vec![Element {
+                rich_message: Some(RichMessage {
+                    template: rich::compressed_payload(body)?,
+                    service_id: Some(*service_id),
+                }),
+                ..Element::default()
+            }]),
+            OutboundSegment::Poke { kind, strength } if *kind != 0 => Ok(vec![common_element(
+                2,
+                *kind,
+                rich::poke_payload(*kind, *strength),
+            )]),
             OutboundSegment::Text(_)
             | OutboundSegment::MentionEveryone { .. }
             | OutboundSegment::Mention { .. }
             | OutboundSegment::Face(_)
             | OutboundSegment::Image { .. }
             | OutboundSegment::Record { .. }
-            | OutboundSegment::Video { .. } => Err(MessageDecodeError),
+            | OutboundSegment::Video { .. }
+            | OutboundSegment::Xml { .. }
+            | OutboundSegment::Poke { .. } => Err(MessageDecodeError),
         }?;
         elements.extend(produced);
     }
@@ -299,11 +330,7 @@ fn mention_element(display: &str, kind: i32, uin: u32, uid: &str) -> Element {
                 .encode_to_vec(),
             ),
         }),
-        face: None,
-        not_online_image: None,
-        custom_face: None,
-        video: None,
-        common: None,
+        ..Element::default()
     }
 }
 
@@ -319,29 +346,26 @@ fn image_elements(group: bool, message_info: &[u8], compatibility: &[u8]) -> Vec
     };
     vec![
         Element {
-            text: None,
-            face: None,
             not_online_image,
             custom_face,
-            video: None,
-            common: None,
+            ..Element::default()
         },
         common,
     ]
 }
 
 fn common_media_element(business_type: u32, message_info: &[u8]) -> Element {
+    common_element(48, business_type, message_info.to_vec())
+}
+
+fn common_element(service_type: i32, business_type: u32, protobuf: Vec<u8>) -> Element {
     Element {
-        text: None,
-        face: None,
-        not_online_image: None,
-        custom_face: None,
-        video: None,
         common: Some(CommonElement {
-            service_type: 48,
-            protobuf: message_info.to_vec(),
+            service_type,
+            protobuf,
             business_type,
         }),
+        ..Element::default()
     }
 }
 
@@ -352,12 +376,8 @@ fn video_elements(group: bool, message_info: &[u8], compatibility: &[u8]) -> Vec
     }
     vec![
         Element {
-            text: None,
-            face: None,
-            not_online_image: None,
-            custom_face: None,
             video: Some(compatibility.to_vec()),
-            common: None,
+            ..Element::default()
         },
         common,
     ]
@@ -461,10 +481,30 @@ struct Element {
     not_online_image: Option<Vec<u8>>,
     #[prost(bytes = "vec", optional, tag = "8")]
     custom_face: Option<Vec<u8>>,
+    #[prost(message, optional, tag = "12")]
+    rich_message: Option<RichMessage>,
     #[prost(bytes = "vec", optional, tag = "19")]
     video: Option<Vec<u8>>,
+    #[prost(message, optional, tag = "51")]
+    light_app: Option<LightApp>,
     #[prost(message, optional, tag = "53")]
     common: Option<CommonElement>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct RichMessage {
+    #[prost(bytes = "vec", tag = "1")]
+    template: Vec<u8>,
+    #[prost(int32, optional, tag = "2")]
+    service_id: Option<i32>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct LightApp {
+    #[prost(bytes = "vec", tag = "1")]
+    data: Vec<u8>,
+    #[prost(bytes = "vec", optional, tag = "2")]
+    resource_id: Option<Vec<u8>>,
 }
 
 #[derive(Clone, PartialEq, Message)]

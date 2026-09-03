@@ -237,6 +237,51 @@ fn video_preserves_legacy_material_before_modern_group_element()
     Ok(())
 }
 
+#[test]
+fn json_xml_and_poke_use_distinct_qq_elements() -> Result<(), Box<dyn std::error::Error>> {
+    let segments = [
+        OutboundSegment::Json("{\"app\":\"demo\"}"),
+        OutboundSegment::Xml {
+            body: "<msg/>",
+            service_id: 35,
+        },
+        OutboundSegment::Poke {
+            kind: 2,
+            strength: 7,
+        },
+    ];
+    let encoded = encode_message(&SendMessageInput {
+        target: SendTextTarget::Group { group_code: 7 },
+        segments: &segments,
+        client_sequence: 8,
+        random: 9,
+        unix_seconds: 10,
+    })?;
+    let elements = TestMessage::decode(encoded.as_slice())?
+        .body
+        .and_then(|body| body.rich_text)
+        .ok_or("missing rich text")?
+        .elements;
+    assert_eq!(elements.len(), 3);
+    assert_eq!(
+        elements[0].light_app.as_ref().map(|app| app.data[0]),
+        Some(1)
+    );
+    let rich = elements[1]
+        .rich_message
+        .as_ref()
+        .ok_or("missing rich message")?;
+    assert_eq!((rich.service_id, rich.template[0]), (Some(35), 1));
+    let common = elements[2]
+        .common
+        .as_ref()
+        .ok_or("missing poke common element")?;
+    assert_eq!((common.service_type, common.business_type), (2, 2));
+    let poke = TestPoke::decode(common.protobuf.as_slice())?;
+    assert_eq!((poke.kind, poke.strength), (2, 7));
+    Ok(())
+}
+
 #[derive(Clone, PartialEq, Message)]
 struct TestMessage {
     #[prost(message, optional, tag = "3")]
@@ -265,10 +310,36 @@ struct TestElement {
     not_online_image: Option<Vec<u8>>,
     #[prost(bytes = "vec", optional, tag = "8")]
     custom_face: Option<Vec<u8>>,
+    #[prost(message, optional, tag = "12")]
+    rich_message: Option<TestRichMessage>,
     #[prost(bytes = "vec", optional, tag = "19")]
     video: Option<Vec<u8>>,
+    #[prost(message, optional, tag = "51")]
+    light_app: Option<TestLightApp>,
     #[prost(message, optional, tag = "53")]
     common: Option<TestCommon>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestRichMessage {
+    #[prost(bytes = "vec", tag = "1")]
+    template: Vec<u8>,
+    #[prost(int32, optional, tag = "2")]
+    service_id: Option<i32>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestLightApp {
+    #[prost(bytes = "vec", tag = "1")]
+    data: Vec<u8>,
+}
+
+#[derive(Clone, Copy, PartialEq, Message)]
+struct TestPoke {
+    #[prost(uint32, tag = "1")]
+    kind: u32,
+    #[prost(uint32, tag = "7")]
+    strength: u32,
 }
 
 #[derive(Clone, PartialEq, Message)]

@@ -352,6 +352,15 @@ enum CompiledSegment {
         message_info: Vec<u8>,
         compatibility: Vec<u8>,
     },
+    Json(String),
+    Xml {
+        body: String,
+        service_id: i32,
+    },
+    Poke {
+        kind: u32,
+        strength: u32,
+    },
 }
 
 impl CompiledSegment {
@@ -393,6 +402,15 @@ impl CompiledSegment {
                 message_info,
                 compatibility,
             },
+            Self::Json(body) => OutboundSegment::Json(body),
+            Self::Xml { body, service_id } => OutboundSegment::Xml {
+                body,
+                service_id: *service_id,
+            },
+            Self::Poke { kind, strength } => OutboundSegment::Poke {
+                kind: *kind,
+                strength: *strength,
+            },
         }
     }
 
@@ -405,6 +423,13 @@ impl CompiledSegment {
             Self::Image { source, .. } => json!({"type": "image", "data": {"file": source}}),
             Self::Record { source, .. } => json!({"type": "record", "data": {"file": source}}),
             Self::Video { source, .. } => json!({"type": "video", "data": {"file": source}}),
+            Self::Json(body) => json!({"type": "json", "data": {"data": body}}),
+            Self::Xml { body, service_id } => {
+                json!({"type": "xml", "data": {"data": body, "service_id": service_id}})
+            }
+            Self::Poke { kind, strength } => {
+                json!({"type": "poke", "data": {"type": kind, "strength": strength, "id": -1}})
+            }
         }
     }
 }
@@ -564,6 +589,37 @@ async fn compile_segment(
                 message_info: uploaded.message_info,
                 compatibility: uploaded.compatibility,
             })
+        }
+        "json" => segment
+            .data()
+            .get("data")
+            .and_then(Value::as_str)
+            .map(|body| CompiledSegment::Json(body.to_owned()))
+            .ok_or(AccountActionError::BadParameters),
+        "xml" => {
+            let body = segment
+                .data()
+                .get("data")
+                .and_then(Value::as_str)
+                .ok_or(AccountActionError::BadParameters)?;
+            let service_id = match segment.data().get("service_id") {
+                Some(value) => segment_u32(Some(value)).ok_or(AccountActionError::BadParameters)?,
+                None => 35,
+            };
+            Ok(CompiledSegment::Xml {
+                body: body.to_owned(),
+                service_id: i32::try_from(service_id)
+                    .map_err(|_error| AccountActionError::BadParameters)?,
+            })
+        }
+        "poke" => {
+            let kind =
+                segment_u32(segment.data().get("type")).ok_or(AccountActionError::BadParameters)?;
+            let strength = match segment.data().get("strength") {
+                Some(value) => segment_u32(Some(value)).ok_or(AccountActionError::BadParameters)?,
+                None => 0,
+            };
+            Ok(CompiledSegment::Poke { kind, strength })
         }
         _ => Err(AccountActionError::Unsupported),
     }
