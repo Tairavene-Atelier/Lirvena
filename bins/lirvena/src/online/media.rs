@@ -4,8 +4,10 @@ use std::time::{Duration, Instant};
 use account_api::AccountActionError;
 use qq_highway::{HighwayClient, HighwaySession, UploadIdentity};
 use qq_media::{
-    ImageTarget, MediaPolicy, MediaReference, MediaResolver, RemoteMediaPolicy, analyze_image,
-    encode_image_metadata_request, parse_image_metadata_response,
+    MediaPolicy, MediaReference, MediaResolver, MediaTarget, RemoteMediaPolicy,
+    RichMediaUploadPlan, analyze_image, encode_image_metadata_request,
+    encode_record_metadata_request, parse_image_metadata_response, parse_record_metadata_response,
+    prepare_record,
 };
 
 use super::packets::{PacketContext, PacketRuntime};
@@ -20,6 +22,11 @@ pub(super) struct UploadedImage {
     pub group: bool,
     pub message_info: Vec<u8>,
     pub compatibility: Vec<u8>,
+}
+
+pub(super) struct UploadedRecord {
+    pub group: bool,
+    pub message_info: Vec<u8>,
 }
 
 pub(super) struct MediaRuntime {
@@ -47,7 +54,7 @@ impl MediaRuntime {
     pub(super) async fn upload_image(
         &mut self,
         reference: &str,
-        target: ImageTarget<'_>,
+        target: MediaTarget<'_>,
         packets: &PacketRuntime,
         pushes: &PushRuntime,
         context: &mut OnlineContext<'_>,
@@ -78,6 +85,67 @@ impl MediaRuntime {
             .map_err(|_error| AccountActionError::QqFailure)?;
         let plan = parse_image_metadata_response(&response, &target)
             .map_err(|_error| AccountActionError::QqFailure)?;
+        self.complete_upload(&plan, object.bytes(), packets, pushes, context)
+            .await?;
+        let (message_info, compatibility) = plan.into_message_material();
+        Ok(UploadedImage {
+            group: matches!(target, MediaTarget::Group(_)),
+            message_info,
+            compatibility,
+        })
+    }
+
+    pub(super) async fn upload_record(
+        &mut self,
+        reference: &str,
+        target: MediaTarget<'_>,
+        packets: &PacketRuntime,
+        pushes: &PushRuntime,
+        context: &mut OnlineContext<'_>,
+    ) -> Result<UploadedRecord, AccountActionError> {
+        let reference =
+            MediaReference::parse(reference).map_err(|_error| AccountActionError::BadParameters)?;
+        let object = self
+            .resolver
+            .resolve(&reference)
+            .await
+            .map_err(|_error| AccountActionError::QqFailure)?;
+        let record =
+            prepare_record(object.bytes()).map_err(|_error| AccountActionError::BadParameters)?;
+        let request = encode_record_metadata_request(
+            target,
+            record.descriptor(),
+            random_nonzero_u32().map_err(|_error| AccountActionError::QqFailure)?,
+        )
+        .map_err(|_error| AccountActionError::BadParameters)?;
+        let response = packets
+            .send_with_reserve(
+                PacketContext::for_account(context, pushes.plan()),
+                request.command(),
+                &[],
+                request.body(),
+            )
+            .await
+            .map_err(|_error| AccountActionError::QqFailure)?;
+        let plan = parse_record_metadata_response(&response, &target)
+            .map_err(|_error| AccountActionError::QqFailure)?;
+        self.complete_upload(&plan, record.bytes(), packets, pushes, context)
+            .await?;
+        let (message_info, _compatibility) = plan.into_message_material();
+        Ok(UploadedRecord {
+            group: matches!(target, MediaTarget::Group(_)),
+            message_info,
+        })
+    }
+
+    async fn complete_upload(
+        &mut self,
+        plan: &RichMediaUploadPlan,
+        bytes: &[u8],
+        packets: &PacketRuntime,
+        pushes: &PushRuntime,
+        context: &mut OnlineContext<'_>,
+    ) -> Result<(), AccountActionError> {
         if let Some(extension) = plan.highway_extension() {
             self.ensure_session(packets, pushes, context).await?;
             let session = self
@@ -96,7 +164,7 @@ impl MediaRuntime {
                     },
                     plan.command_id(),
                     extension,
-                    object.bytes(),
+                    bytes,
                 )
                 .await
                 .map_err(|_error| {
@@ -104,11 +172,7 @@ impl MediaRuntime {
                     AccountActionError::QqFailure
                 })?;
         }
-        Ok(UploadedImage {
-            group: matches!(target, ImageTarget::Group(_)),
-            message_info: plan.message_info().to_vec(),
-            compatibility: plan.compatibility_message().to_vec(),
-        })
+        Ok(())
     }
 
     async fn ensure_session(

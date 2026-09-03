@@ -48,8 +48,7 @@ pub(super) async fn execute_account_action(
             "app_version": env!("CARGO_PKG_VERSION"),
             "protocol_version": "v11",
         })),
-        "can_send_image" => Ok(json!({"yes": true})),
-        "can_send_record" => Ok(json!({"yes": false})),
+        "can_send_image" | "can_send_record" => Ok(json!({"yes": true})),
         "get_friend_list" => directory::friend_list(packets, pushes, friends, context).await,
         "get_stranger_info" => {
             stranger_info(
@@ -342,6 +341,11 @@ enum CompiledSegment {
         message_info: Vec<u8>,
         compatibility: Vec<u8>,
     },
+    Record {
+        source: String,
+        group: bool,
+        message_info: Vec<u8>,
+    },
 }
 
 impl CompiledSegment {
@@ -365,6 +369,14 @@ impl CompiledSegment {
                 message_info,
                 compatibility,
             },
+            Self::Record {
+                group,
+                message_info,
+                ..
+            } => OutboundSegment::Record {
+                group: *group,
+                message_info,
+            },
         }
     }
 
@@ -375,6 +387,7 @@ impl CompiledSegment {
             Self::Mention { uin, .. } => json!({"type": "at", "data": {"qq": uin}}),
             Self::Face(value) => json!({"type": "face", "data": {"id": value}}),
             Self::Image { source, .. } => json!({"type": "image", "data": {"file": source}}),
+            Self::Record { source, .. } => json!({"type": "record", "data": {"file": source}}),
         }
     }
 }
@@ -483,8 +496,8 @@ async fn compile_segment(
                 .and_then(Value::as_str)
                 .ok_or(AccountActionError::BadParameters)?;
             let image_target = match target {
-                SendTextTarget::Private { uid, .. } => qq_media::ImageTarget::Direct(uid),
-                SendTextTarget::Group { group_code } => qq_media::ImageTarget::Group(*group_code),
+                SendTextTarget::Private { uid, .. } => qq_media::MediaTarget::Direct(uid),
+                SendTextTarget::Group { group_code } => qq_media::MediaTarget::Group(*group_code),
             };
             let uploaded = media
                 .upload_image(source, image_target, packets, pushes, context)
@@ -494,6 +507,25 @@ async fn compile_segment(
                 group: uploaded.group,
                 message_info: uploaded.message_info,
                 compatibility: uploaded.compatibility,
+            })
+        }
+        "record" => {
+            let source = segment
+                .data()
+                .get("file")
+                .and_then(Value::as_str)
+                .ok_or(AccountActionError::BadParameters)?;
+            let record_target = match target {
+                SendTextTarget::Private { uid, .. } => qq_media::MediaTarget::Direct(uid),
+                SendTextTarget::Group { group_code } => qq_media::MediaTarget::Group(*group_code),
+            };
+            let uploaded = media
+                .upload_record(source, record_target, packets, pushes, context)
+                .await?;
+            Ok(CompiledSegment::Record {
+                source: source.to_owned(),
+                group: uploaded.group,
+                message_info: uploaded.message_info,
             })
         }
         _ => Err(AccountActionError::Unsupported),

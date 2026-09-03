@@ -70,6 +70,13 @@ pub enum OutboundSegment<'a> {
         /// Opaque legacy compatibility message returned by QQ.
         compatibility: &'a [u8],
     },
+    /// Tencent-created modern voice-message material.
+    Record {
+        /// Whether this record targets a group scene.
+        group: bool,
+        /// Opaque modern message information returned by QQ.
+        message_info: &'a [u8],
+    },
 }
 
 /// Bounded input for one ordinary QQ rich-text message.
@@ -218,11 +225,21 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
             {
                 Ok(image_elements(*group, message_info, compatibility))
             }
+            OutboundSegment::Record {
+                group,
+                message_info,
+            } if !message_info.is_empty() && message_info.len() <= MAX_MEDIA_METADATA_BYTES => {
+                Ok(vec![common_media_element(
+                    if *group { 22 } else { 12 },
+                    message_info,
+                )])
+            }
             OutboundSegment::Text(_)
             | OutboundSegment::MentionEveryone { .. }
             | OutboundSegment::Mention { .. }
             | OutboundSegment::Face(_)
-            | OutboundSegment::Image { .. } => Err(MessageDecodeError),
+            | OutboundSegment::Image { .. }
+            | OutboundSegment::Record { .. } => Err(MessageDecodeError),
         }?;
         elements.extend(produced);
     }
@@ -268,17 +285,7 @@ fn mention_element(display: &str, kind: i32, uin: u32, uid: &str) -> Element {
 }
 
 fn image_elements(group: bool, message_info: &[u8], compatibility: &[u8]) -> Vec<Element> {
-    let common = Element {
-        text: None,
-        face: None,
-        not_online_image: None,
-        custom_face: None,
-        common: Some(CommonElement {
-            service_type: 48,
-            protobuf: message_info.to_vec(),
-            business_type: if group { 20 } else { 10 },
-        }),
-    };
+    let common = common_media_element(if group { 20 } else { 10 }, message_info);
     if compatibility.is_empty() {
         return vec![common];
     }
@@ -297,6 +304,20 @@ fn image_elements(group: bool, message_info: &[u8], compatibility: &[u8]) -> Vec
         },
         common,
     ]
+}
+
+fn common_media_element(business_type: u32, message_info: &[u8]) -> Element {
+    Element {
+        text: None,
+        face: None,
+        not_online_image: None,
+        custom_face: None,
+        common: Some(CommonElement {
+            service_type: 48,
+            protobuf: message_info.to_vec(),
+            business_type,
+        }),
+    }
 }
 
 fn valid_uid(value: &str) -> bool {

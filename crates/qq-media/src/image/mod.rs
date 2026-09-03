@@ -4,17 +4,17 @@ mod request;
 mod response;
 
 pub use inspect::analyze_image;
-pub use model::{ImageDescriptor, ImageFormat, ImageMetadataRequest, ImageTarget, ImageUploadPlan};
+pub use model::{ImageDescriptor, ImageFormat, ImageMetadataRequest};
 pub use request::encode_image_metadata_request;
 pub use response::parse_image_metadata_response;
 
 const MAX_UID_BYTES: usize = 128;
 
-fn valid_uid(uid: &str) -> bool {
+pub(crate) fn valid_uid(uid: &str) -> bool {
     !uid.is_empty() && uid.len() <= MAX_UID_BYTES && !uid.chars().any(char::is_control)
 }
 
-fn upper_hex(input: &[u8]) -> String {
+pub(crate) fn upper_hex(input: &[u8]) -> String {
     use core::fmt::Write as _;
 
     let mut output = String::with_capacity(input.len() * 2);
@@ -24,7 +24,7 @@ fn upper_hex(input: &[u8]) -> String {
     output
 }
 
-fn decode_hex<const N: usize>(input: &str) -> Result<[u8; N], crate::MediaError> {
+pub(crate) fn decode_hex<const N: usize>(input: &str) -> Result<[u8; N], crate::MediaError> {
     if input.len() != N * 2 {
         return Err(crate::MediaError::RemoteRejected);
     }
