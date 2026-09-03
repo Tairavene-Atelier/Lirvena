@@ -5,6 +5,8 @@ use crate::MessageDecodeError;
 const MAX_TEXT_BYTES: usize = 4_500;
 const MAX_ELEMENTS: usize = 256;
 const MAX_DISPLAY_BYTES: usize = 1_024;
+const MAX_MEDIA_METADATA_BYTES: usize = 1024 * 1024;
+const MAX_MEDIA_COMPATIBILITY_BYTES: usize = 512 * 1024;
 
 /// Address of one text-message recipient.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -59,6 +61,15 @@ pub enum OutboundSegment<'a> {
     },
     /// One classic QQ face identifier.
     Face(u16),
+    /// Tencent-created modern and legacy image message material.
+    Image {
+        /// Whether this image targets a group scene.
+        group: bool,
+        /// Opaque modern message information returned by QQ.
+        message_info: &'a [u8],
+        /// Opaque legacy compatibility message returned by QQ.
+        compatibility: &'a [u8],
+    },
 }
 
 /// Bounded input for one ordinary QQ rich-text message.
@@ -156,27 +167,29 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
         None
     };
     let mut text_bytes = 0usize;
-    let elements = input
-        .segments
-        .iter()
-        .map(|segment| match segment {
+    let mut elements = Vec::with_capacity(input.segments.len() * 2);
+    for segment in input.segments {
+        let produced = match segment {
             OutboundSegment::Text(value) if !value.is_empty() => {
                 text_bytes = text_bytes
                     .checked_add(value.len())
                     .ok_or(MessageDecodeError)?;
-                Ok(Element {
+                Ok(vec![Element {
                     text: Some(Text {
                         value: Some((*value).to_owned()),
                         reserve: None,
                     }),
                     face: None,
-                })
+                    not_online_image: None,
+                    custom_face: None,
+                    common: None,
+                }])
             }
             OutboundSegment::MentionEveryone { display } if valid_display(display) => {
                 text_bytes = text_bytes
                     .checked_add(display.len())
                     .ok_or(MessageDecodeError)?;
-                Ok(mention_element(display, 1, 0, ""))
+                Ok(vec![mention_element(display, 1, 0, "")])
             }
             OutboundSegment::Mention { uin, uid, display }
                 if *uin != 0 && valid_uid(uid) && valid_display(display) =>
@@ -184,20 +197,35 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
                 text_bytes = text_bytes
                     .checked_add(display.len())
                     .ok_or(MessageDecodeError)?;
-                Ok(mention_element(display, 2, *uin, uid))
+                Ok(vec![mention_element(display, 2, *uin, uid)])
             }
-            OutboundSegment::Face(id) if *id < 260 => Ok(Element {
+            OutboundSegment::Face(id) if *id < 260 => Ok(vec![Element {
                 text: None,
                 face: Some(Face {
                     index: Some(i32::from(*id)),
                 }),
-            }),
+                not_online_image: None,
+                custom_face: None,
+                common: None,
+            }]),
+            OutboundSegment::Image {
+                group,
+                message_info,
+                compatibility,
+            } if !message_info.is_empty()
+                && message_info.len() <= MAX_MEDIA_METADATA_BYTES
+                && compatibility.len() <= MAX_MEDIA_COMPATIBILITY_BYTES =>
+            {
+                Ok(image_elements(*group, message_info, compatibility))
+            }
             OutboundSegment::Text(_)
             | OutboundSegment::MentionEveryone { .. }
             | OutboundSegment::Mention { .. }
-            | OutboundSegment::Face(_) => Err(MessageDecodeError),
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+            | OutboundSegment::Face(_)
+            | OutboundSegment::Image { .. } => Err(MessageDecodeError),
+        }?;
+        elements.extend(produced);
+    }
     if text_bytes > MAX_TEXT_BYTES {
         return Err(MessageDecodeError);
     }
@@ -233,7 +261,42 @@ fn mention_element(display: &str, kind: i32, uin: u32, uid: &str) -> Element {
             ),
         }),
         face: None,
+        not_online_image: None,
+        custom_face: None,
+        common: None,
     }
+}
+
+fn image_elements(group: bool, message_info: &[u8], compatibility: &[u8]) -> Vec<Element> {
+    let common = Element {
+        text: None,
+        face: None,
+        not_online_image: None,
+        custom_face: None,
+        common: Some(CommonElement {
+            service_type: 48,
+            protobuf: message_info.to_vec(),
+            business_type: if group { 20 } else { 10 },
+        }),
+    };
+    if compatibility.is_empty() {
+        return vec![common];
+    }
+    let (not_online_image, custom_face) = if group {
+        (None, Some(compatibility.to_vec()))
+    } else {
+        (Some(compatibility.to_vec()), None)
+    };
+    vec![
+        Element {
+            text: None,
+            face: None,
+            not_online_image,
+            custom_face,
+            common: None,
+        },
+        common,
+    ]
 }
 
 fn valid_uid(value: &str) -> bool {
@@ -330,6 +393,22 @@ struct Element {
     text: Option<Text>,
     #[prost(message, optional, tag = "2")]
     face: Option<Face>,
+    #[prost(bytes = "vec", optional, tag = "4")]
+    not_online_image: Option<Vec<u8>>,
+    #[prost(bytes = "vec", optional, tag = "8")]
+    custom_face: Option<Vec<u8>>,
+    #[prost(message, optional, tag = "53")]
+    common: Option<CommonElement>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct CommonElement {
+    #[prost(int32, tag = "1")]
+    service_type: i32,
+    #[prost(bytes = "vec", tag = "2")]
+    protobuf: Vec<u8>,
+    #[prost(uint32, tag = "3")]
+    business_type: u32,
 }
 
 #[derive(Clone, PartialEq, Message)]

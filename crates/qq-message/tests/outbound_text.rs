@@ -112,6 +112,73 @@ fn group_mentions_and_classic_face_keep_wire_order() -> Result<(), Box<dyn std::
     Ok(())
 }
 
+#[test]
+fn image_uses_legacy_then_modern_elements_without_reencoding()
+-> Result<(), Box<dyn std::error::Error>> {
+    let segments = [OutboundSegment::Image {
+        group: true,
+        message_info: &[0x08, 0x01],
+        compatibility: &[0x10, 0x02],
+    }];
+    let encoded = encode_message(&SendMessageInput {
+        target: SendTextTarget::Group { group_code: 7 },
+        segments: &segments,
+        client_sequence: 8,
+        random: 9,
+        unix_seconds: 10,
+    })?;
+    let elements = TestMessage::decode(encoded.as_slice())?
+        .body
+        .and_then(|body| body.rich_text)
+        .ok_or("missing rich text")?
+        .elements;
+    assert_eq!(elements.len(), 2);
+    assert_eq!(
+        elements[0].custom_face.as_deref(),
+        Some([0x10, 0x02].as_slice())
+    );
+    let common = elements[1]
+        .common
+        .as_ref()
+        .ok_or("missing common element")?;
+    assert_eq!((common.service_type, common.business_type), (48, 20));
+    assert_eq!(common.protobuf, [0x08, 0x01]);
+    Ok(())
+}
+
+#[test]
+fn image_without_compatibility_uses_only_modern_element() -> Result<(), Box<dyn std::error::Error>>
+{
+    let segments = [OutboundSegment::Image {
+        group: false,
+        message_info: &[0x08, 0x01],
+        compatibility: &[],
+    }];
+    let encoded = encode_message(&SendMessageInput {
+        target: SendTextTarget::Private {
+            uin: 7,
+            uid: "u_target",
+        },
+        segments: &segments,
+        client_sequence: 8,
+        random: 9,
+        unix_seconds: 10,
+    })?;
+    let elements = TestMessage::decode(encoded.as_slice())?
+        .body
+        .and_then(|body| body.rich_text)
+        .ok_or("missing rich text")?
+        .elements;
+    assert_eq!(elements.len(), 1);
+    assert!(elements[0].not_online_image.is_none());
+    let common = elements[0]
+        .common
+        .as_ref()
+        .ok_or("missing common element")?;
+    assert_eq!((common.service_type, common.business_type), (48, 10));
+    Ok(())
+}
+
 #[derive(Clone, PartialEq, Message)]
 struct TestMessage {
     #[prost(message, optional, tag = "3")]
@@ -136,6 +203,22 @@ struct TestElement {
     text: Option<TestText>,
     #[prost(message, optional, tag = "2")]
     face: Option<TestFace>,
+    #[prost(bytes = "vec", optional, tag = "4")]
+    not_online_image: Option<Vec<u8>>,
+    #[prost(bytes = "vec", optional, tag = "8")]
+    custom_face: Option<Vec<u8>>,
+    #[prost(message, optional, tag = "53")]
+    common: Option<TestCommon>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestCommon {
+    #[prost(int32, tag = "1")]
+    service_type: i32,
+    #[prost(bytes = "vec", tag = "2")]
+    protobuf: Vec<u8>,
+    #[prost(uint32, tag = "3")]
+    business_type: u32,
 }
 
 #[derive(Clone, PartialEq, Message)]

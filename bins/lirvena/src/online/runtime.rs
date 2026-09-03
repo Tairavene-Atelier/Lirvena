@@ -17,7 +17,8 @@ use qq_session::AuthenticatedSession;
 use tokio::net::TcpStream;
 use tokio::time::sleep;
 
-use super::actions::execute_account_action;
+use super::actions::{ActionResources, execute_account_action};
+use super::media::MediaRuntime;
 use super::message_registry::MessageRegistry;
 use super::notices;
 use super::packets::{PacketContext, PacketRuntime};
@@ -47,6 +48,7 @@ pub(crate) struct OnlineRuntime {
     events: AccountEventPublisher,
     friends: BTreeMap<u32, FriendEntry>,
     messages: MessageRegistry,
+    media: MediaRuntime,
 }
 
 impl OnlineRuntime {
@@ -67,6 +69,7 @@ impl OnlineRuntime {
             events,
             friends: BTreeMap::new(),
             messages,
+            media: MediaRuntime::new(state_directory)?,
         })
     }
 
@@ -212,7 +215,10 @@ impl OnlineRuntime {
                         &self.packets,
                         &self.pushes,
                         &mut self.friends,
-                        &mut self.messages,
+                        &mut ActionResources {
+                            messages: &mut self.messages,
+                            media: &mut self.media,
+                        },
                         &mut context,
                     ).await;
                     pending.complete(result);
