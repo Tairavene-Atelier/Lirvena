@@ -30,6 +30,36 @@ pub(super) struct ElementWire {
     pub light_app: Option<Vec<u8>>,
     #[prost(bytes = "vec", optional, tag = "53")]
     pub common: Option<Vec<u8>>,
+    #[prost(bytes = "vec", optional, tag = "45")]
+    pub source: Option<Vec<u8>>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub(super) struct SourceMessageWire {
+    #[prost(uint32, repeated, tag = "1")]
+    pub sequences: Vec<u32>,
+    #[prost(uint64, tag = "2")]
+    pub sender_uin: u64,
+    #[prost(int32, optional, tag = "3")]
+    pub timestamp: Option<i32>,
+    #[prost(bytes = "vec", repeated, tag = "5")]
+    pub elements: Vec<Vec<u8>>,
+    #[prost(bytes = "vec", optional, tag = "8")]
+    pub reserve: Option<Vec<u8>>,
+    #[prost(uint64, optional, tag = "10")]
+    pub to_uin: Option<u64>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub(super) struct SourceMessageReserveWire {
+    #[prost(uint64, tag = "3")]
+    pub message_uid: u64,
+    #[prost(string, optional, tag = "6")]
+    pub sender_uid: Option<String>,
+    #[prost(string, optional, tag = "7")]
+    pub receiver_uid: Option<String>,
+    #[prost(uint32, optional, tag = "8")]
+    pub friend_sequence: Option<u32>,
 }
 
 #[derive(Clone, PartialEq, Message)]

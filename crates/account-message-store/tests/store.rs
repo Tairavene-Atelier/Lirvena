@@ -1,6 +1,6 @@
 //! Durable bounded account message-state contracts.
 
-use account_message_store::{MessageRecord, MessageStore, RecallTarget};
+use account_message_store::{MessageRecord, MessageStore, QuoteTarget, RecallTarget};
 use account_runtime::AccountLocalId;
 use rusqlite::Connection;
 use serde_json::json;
@@ -33,7 +33,15 @@ fn records_survive_restart_and_recall_fields_round_trip() -> TestResult {
             sequence: 101,
             random: Some(102),
         },
-    )?;
+    )?
+    .with_quote(QuoteTarget::new(
+        101,
+        202,
+        303,
+        "u_sender".to_owned(),
+        404,
+        vec![vec![0x0a, 0x02, 0x68, 0x69]],
+    )?);
     let mut store = MessageStore::open(&directory, local_id)?;
     store.put(&record)?;
     store.put(&group_record)?;
@@ -90,6 +98,43 @@ fn unknown_schema_fails_closed() -> TestResult {
 }
 
 #[test]
+fn quote_lookup_requires_one_unique_retained_correlation() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let directory = root.path().join("private");
+    let local_id = AccountLocalId::from_bytes([12; 16]);
+    let quote = QuoteTarget::new(101, 202, 303, "u_sender".to_owned(), 404, vec![vec![1]])?;
+    let mut store = MessageStore::open(&directory, local_id)?;
+    let first = MessageRecord::new(
+        1,
+        10,
+        json!({"message_id": 1}),
+        RecallTarget::Group {
+            group_code: 100,
+            sequence: 101,
+            random: None,
+        },
+    )?
+    .with_quote(quote.clone());
+    store.put(&first)?;
+    assert_eq!(store.find_quote(202, 101)?, Some(first));
+
+    let second = MessageRecord::new(
+        2,
+        11,
+        json!({"message_id": 2}),
+        RecallTarget::Group {
+            group_code: 100,
+            sequence: 102,
+            random: None,
+        },
+    )?
+    .with_quote(quote);
+    store.put(&second)?;
+    assert!(store.find_quote(202, 101).is_err());
+    Ok(())
+}
+
+#[test]
 fn schema_one_group_records_migrate_without_inventing_random() -> TestResult {
     let root = tempfile::tempdir()?;
     let directory = root.path().join("private");
@@ -104,10 +149,29 @@ fn schema_one_group_records_migrate_without_inventing_random() -> TestResult {
             random: None,
         },
     )?;
-    MessageStore::open(&directory, local_id)?.put(&record)?;
+    drop(MessageStore::open(&directory, local_id)?);
     let path = directory.join("messages-0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b.sqlite3");
     let connection = Connection::open(&path)?;
-    connection.pragma_update(None, "user_version", 1)?;
+    connection.execute_batch(
+        "DROP TABLE messages;
+         CREATE TABLE messages (
+             message_id INTEGER PRIMARY KEY,
+             inserted_at_ms INTEGER NOT NULL,
+             response_json TEXT NOT NULL,
+             recall_kind INTEGER NOT NULL,
+             group_code INTEGER,
+             uid TEXT,
+             sequence BLOB,
+             client_sequence BLOB,
+             random INTEGER,
+             timestamp INTEGER
+         );
+         INSERT INTO messages VALUES (
+             9, 10, '{\"message_id\":9,\"message\":[]}', 1, 100, NULL,
+             X'00000000000000C8', NULL, NULL, NULL
+         );
+         PRAGMA user_version = 1;",
+    )?;
     drop(connection);
 
     let reopened = MessageStore::open(&directory, local_id)?;
@@ -115,7 +179,7 @@ fn schema_one_group_records_migrate_without_inventing_random() -> TestResult {
     let connection = Connection::open(path)?;
     assert_eq!(
         connection.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))?,
-        2
+        3
     );
     Ok(())
 }

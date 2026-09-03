@@ -33,6 +33,22 @@ struct ElementFixture {
     light_app: Option<Vec<u8>>,
     #[prost(bytes = "vec", optional, tag = "53")]
     common: Option<Vec<u8>>,
+    #[prost(bytes = "vec", optional, tag = "45")]
+    source: Option<Vec<u8>>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct SourceFixture {
+    #[prost(uint32, repeated, tag = "1")]
+    sequences: Vec<u32>,
+    #[prost(bytes = "vec", optional, tag = "8")]
+    reserve: Option<Vec<u8>>,
+}
+
+#[derive(Clone, Copy, PartialEq, Message)]
+struct SourceReserveFixture {
+    #[prost(uint64, tag = "3")]
+    message_uid: u64,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -211,6 +227,47 @@ fn json_xml_and_poke_are_projected_from_both_rich_generations() -> TestResult {
 }
 
 #[test]
+fn reply_projects_only_complete_source_correlations() -> TestResult {
+    let source = SourceFixture {
+        sequences: vec![101],
+        reserve: Some(SourceReserveFixture { message_uid: 202 }.encode_to_vec()),
+    }
+    .encode_to_vec();
+    let encoded = ElementFixture {
+        text: None,
+        face: None,
+        rich_message: None,
+        light_app: None,
+        common: None,
+        source: Some(source),
+    }
+    .encode_to_vec();
+    let decoded = decode_rich_text(&rich([encoded]))?;
+    let Segment::Reply(reply) = decoded.elements()[0].segment() else {
+        return Err("expected reply".into());
+    };
+    assert_eq!((reply.sequence(), reply.message_uid()), (101, 202));
+
+    let malformed = ElementFixture {
+        text: None,
+        face: None,
+        rich_message: None,
+        light_app: None,
+        common: None,
+        source: Some(
+            SourceFixture {
+                sequences: vec![],
+                reserve: Some(SourceReserveFixture { message_uid: 202 }.encode_to_vec()),
+            }
+            .encode_to_vec(),
+        ),
+    }
+    .encode_to_vec();
+    assert!(decode_rich_text(&rich([malformed])).is_err());
+    Ok(())
+}
+
+#[test]
 fn ambiguous_and_unknown_elements_remain_lossless() -> TestResult {
     let ambiguous = element(
         Some(
@@ -320,6 +377,7 @@ fn element(text: Option<Vec<u8>>, face: Option<Vec<u8>>, common: Option<Vec<u8>>
         rich_message: None,
         light_app: None,
         common,
+        source: None,
     }
     .encode_to_vec()
 }
@@ -338,6 +396,7 @@ fn common_with_business(service: i32, business_type: u32, body: Vec<u8>) -> Vec<
             }
             .encode_to_vec(),
         ),
+        source: None,
     }
     .encode_to_vec()
 }
@@ -355,6 +414,7 @@ fn rich_message(service_id: i32, body: &str) -> Result<Vec<u8>, std::io::Error> 
         ),
         light_app: None,
         common: None,
+        source: None,
     }
     .encode_to_vec())
 }
@@ -371,6 +431,7 @@ fn light_app(body: &str) -> Result<Vec<u8>, std::io::Error> {
             .encode_to_vec(),
         ),
         common: None,
+        source: None,
     }
     .encode_to_vec())
 }

@@ -102,6 +102,23 @@ pub enum OutboundSegment<'a> {
         /// Poke strength.
         strength: u32,
     },
+    /// One reply to retained QQ message material.
+    Reply {
+        /// Whether the retained source belongs to this group conversation.
+        group: bool,
+        /// Source sequence chosen by the QQ message generation.
+        sequence: u32,
+        /// Original QQ message identifier.
+        message_uid: u64,
+        /// Original sender or direct peer numeric identity.
+        sender_uin: u32,
+        /// Original sender or direct peer current UID.
+        sender_uid: &'a str,
+        /// Original message timestamp.
+        timestamp: u32,
+        /// Original encoded QQ elements in wire order.
+        elements: &'a [Vec<u8>],
+    },
 }
 
 /// Bounded input for one ordinary QQ rich-text message.
@@ -282,6 +299,47 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
                 *kind,
                 crate::rich_content::encode_poke(*kind, *strength),
             )]),
+            OutboundSegment::Reply {
+                group,
+                sequence,
+                message_uid,
+                sender_uin,
+                sender_uid,
+                timestamp,
+                elements,
+            } if *group == matches!(input.target, SendTextTarget::Group { .. })
+                && *sequence != 0
+                && *message_uid != 0
+                && *sender_uin != 0
+                && valid_uid(sender_uid)
+                && *timestamp != 0
+                && valid_reply_elements(elements) =>
+            {
+                let reply = Element {
+                    source: Some(SourceMessage {
+                        sequences: vec![*sequence],
+                        sender_uin: u64::from(*sender_uin),
+                        timestamp: Some(
+                            i32::try_from(*timestamp).map_err(|_error| MessageDecodeError)?,
+                        ),
+                        elements: elements.to_vec(),
+                        reserve: Some(
+                            SourceMessageReserve {
+                                message_uid: *message_uid,
+                                sender_uid: Some((*sender_uid).to_owned()),
+                            }
+                            .encode_to_vec(),
+                        ),
+                        to_uin: Some(0),
+                    }),
+                    ..Element::default()
+                };
+                if *group {
+                    Ok(vec![reply, mention_element("not null", 2, 0, sender_uid)])
+                } else {
+                    Ok(vec![reply])
+                }
+            }
             OutboundSegment::Text(_)
             | OutboundSegment::MentionEveryone { .. }
             | OutboundSegment::Mention { .. }
@@ -290,7 +348,8 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
             | OutboundSegment::Record { .. }
             | OutboundSegment::Video { .. }
             | OutboundSegment::Xml { .. }
-            | OutboundSegment::Poke { .. } => Err(MessageDecodeError),
+            | OutboundSegment::Poke { .. }
+            | OutboundSegment::Reply { .. } => Err(MessageDecodeError),
         }?;
         elements.extend(produced);
     }
@@ -391,6 +450,14 @@ fn valid_display(value: &str) -> bool {
         && !value.chars().any(|character| character == '\0')
 }
 
+fn valid_reply_elements(elements: &[Vec<u8>]) -> bool {
+    !elements.is_empty()
+        && elements.len() <= MAX_ELEMENTS
+        && elements
+            .iter()
+            .all(|element| !element.is_empty() && element.len() <= MAX_MEDIA_METADATA_BYTES)
+}
+
 /// Parses one `MessageSvc.PbSendMsg` response.
 ///
 /// # Errors
@@ -487,6 +554,32 @@ struct Element {
     light_app: Option<LightApp>,
     #[prost(message, optional, tag = "53")]
     common: Option<CommonElement>,
+    #[prost(message, optional, tag = "45")]
+    source: Option<SourceMessage>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct SourceMessage {
+    #[prost(uint32, repeated, tag = "1")]
+    sequences: Vec<u32>,
+    #[prost(uint64, tag = "2")]
+    sender_uin: u64,
+    #[prost(int32, optional, tag = "3")]
+    timestamp: Option<i32>,
+    #[prost(bytes = "vec", repeated, tag = "5")]
+    elements: Vec<Vec<u8>>,
+    #[prost(bytes = "vec", optional, tag = "8")]
+    reserve: Option<Vec<u8>>,
+    #[prost(uint64, optional, tag = "10")]
+    to_uin: Option<u64>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct SourceMessageReserve {
+    #[prost(uint64, tag = "3")]
+    message_uid: u64,
+    #[prost(string, optional, tag = "6")]
+    sender_uid: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Message)]

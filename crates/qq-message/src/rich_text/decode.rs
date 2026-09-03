@@ -1,12 +1,13 @@
 use prost::Message;
 
 use super::model::{
-    FaceKind, FaceSegment, MentionSegment, MentionTarget, PokeSegment, RichTextElement,
-    RichTextMessage, Segment, XmlSegment,
+    FaceKind, FaceSegment, MentionSegment, MentionTarget, PokeSegment, ReplySegment,
+    RichTextElement, RichTextMessage, Segment, XmlSegment,
 };
 use super::proto::{
     AnimatedFaceWire, CommonWire, ElementWire, FaceWire, LightAppWire, MentionWire,
-    RichMessageWire, RichTextWire, StandardFaceWire, TextWire,
+    RichMessageWire, RichTextWire, SourceMessageReserveWire, SourceMessageWire, StandardFaceWire,
+    TextWire,
 };
 use crate::MessageDecodeError;
 
@@ -82,6 +83,11 @@ fn decode_element(encoded: Vec<u8>) -> Result<RichTextElement, MessageDecodeErro
             .map(decode_light_app)
             .transpose()?
             .flatten(),
+        wire.source
+            .as_deref()
+            .map(decode_source)
+            .transpose()?
+            .flatten(),
     ];
     let mut supported = projections.into_iter().flatten();
     let first = supported.next();
@@ -91,6 +97,27 @@ fn decode_element(encoded: Vec<u8>) -> Result<RichTextElement, MessageDecodeErro
         first.unwrap_or(Segment::Unsupported)
     };
     Ok(RichTextElement::new(segment, encoded))
+}
+
+fn decode_source(input: &[u8]) -> Result<Option<Segment>, MessageDecodeError> {
+    let source = SourceMessageWire::decode(input).map_err(|_error| MessageDecodeError)?;
+    if source.sequences.len() != 1 || source.sequences[0] == 0 {
+        return Err(MessageDecodeError);
+    }
+    let reserve = source
+        .reserve
+        .as_deref()
+        .ok_or(MessageDecodeError)
+        .and_then(|value| {
+            SourceMessageReserveWire::decode(value).map_err(|_error| MessageDecodeError)
+        })?;
+    if reserve.message_uid == 0 {
+        return Err(MessageDecodeError);
+    }
+    Ok(Some(Segment::Reply(ReplySegment::new(
+        source.sequences[0],
+        reserve.message_uid,
+    ))))
 }
 
 fn decode_text(input: &[u8]) -> Result<Option<Segment>, MessageDecodeError> {

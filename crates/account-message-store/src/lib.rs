@@ -8,7 +8,11 @@ use local_state::open_private_wal;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
-const SCHEMA_VERSION: i64 = 2;
+mod quote;
+
+pub use quote::QuoteTarget;
+
+const SCHEMA_VERSION: i64 = 3;
 const MAX_MESSAGES: usize = 4_096;
 const MAX_JSON_BYTES: usize = 64 * 1024;
 const MAX_UID_BYTES: usize = 128;
@@ -87,6 +91,7 @@ pub struct MessageRecord {
     inserted_at_ms: u64,
     response: Value,
     recall: RecallTarget,
+    quote: Option<QuoteTarget>,
 }
 
 impl MessageRecord {
@@ -117,7 +122,15 @@ impl MessageRecord {
             inserted_at_ms,
             response,
             recall,
+            quote: None,
         })
+    }
+
+    /// Adds independently validated QQ quote material to this record.
+    #[must_use]
+    pub fn with_quote(mut self, quote: QuoteTarget) -> Self {
+        self.quote = Some(quote);
+        self
     }
 
     /// Returns the account-local message identifier.
@@ -136,6 +149,12 @@ impl MessageRecord {
     #[must_use]
     pub const fn recall(&self) -> &RecallTarget {
         &self.recall
+    }
+
+    /// Returns retained QQ quote material when this storage generation observed it.
+    #[must_use]
+    pub const fn quote(&self) -> Option<&QuoteTarget> {
+        self.quote.as_ref()
     }
 }
 
@@ -185,12 +204,15 @@ impl MessageStore {
         let encoded = serde_json::to_string(record.response())
             .map_err(|_error| MessageStoreError::Configuration)?;
         let fields = RecallFields::from_target(record.recall());
+        let quote = record.quote();
+        let quote_elements = quote.map(QuoteTarget::encode_elements).transpose()?;
         let transaction = self.connection.transaction()?;
         transaction.execute(
             "INSERT OR REPLACE INTO messages (
                  message_id, inserted_at_ms, response_json, recall_kind, group_code, uid,
-                 sequence, client_sequence, random, timestamp
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                 sequence, client_sequence, random, timestamp, quote_sequence, quote_message_uid,
+                 quote_sender_uin, quote_sender_uid, quote_timestamp, quote_elements
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 i64::from(record.message_id),
                 to_i64(record.inserted_at_ms)?,
@@ -202,6 +224,12 @@ impl MessageStore {
                 fields.client_sequence.map(u64::to_be_bytes).map(Vec::from),
                 fields.random.map(i64::from),
                 fields.timestamp.map(i64::from),
+                quote.map(|value| i64::from(value.sequence())),
+                quote.map(|value| value.message_uid().to_be_bytes().to_vec()),
+                quote.map(|value| i64::from(value.sender_uin())),
+                quote.map(QuoteTarget::sender_uid),
+                quote.map(|value| i64::from(value.timestamp())),
+                quote_elements,
             ],
         )?;
         transaction.execute(
@@ -224,7 +252,8 @@ impl MessageStore {
             .connection
             .query_row(
                 "SELECT inserted_at_ms, response_json, recall_kind, group_code, uid, sequence,
-                        client_sequence, random, timestamp
+                        client_sequence, random, timestamp, quote_sequence, quote_message_uid,
+                        quote_sender_uin, quote_sender_uid, quote_timestamp, quote_elements
                  FROM messages WHERE message_id = ?1",
                 [i64::from(message_id)],
                 |row| {
@@ -238,11 +267,51 @@ impl MessageStore {
                         client_sequence: row.get(6)?,
                         random: row.get(7)?,
                         timestamp: row.get(8)?,
+                        quote_sequence: row.get(9)?,
+                        quote_message_uid: row.get(10)?,
+                        quote_sender_uin: row.get(11)?,
+                        quote_sender_uid: row.get(12)?,
+                        quote_timestamp: row.get(13)?,
+                        quote_elements: row.get(14)?,
                     })
                 },
             )
             .optional()?;
         stored.map(|row| row.into_record(message_id)).transpose()
+    }
+
+    /// Finds the unique retained message carrying one QQ reply correlation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for absent correlations, ambiguous retained state, or a
+    /// persistence failure.
+    pub fn find_quote(
+        &self,
+        message_uid: u64,
+        sequence: u32,
+    ) -> Result<Option<MessageRecord>, MessageStoreError> {
+        if message_uid == 0 || sequence == 0 {
+            return Err(MessageStoreError::Configuration);
+        }
+        let mut statement = self.connection.prepare(
+            "SELECT message_id FROM messages
+             WHERE quote_message_uid = ?1 AND quote_sequence = ?2
+             ORDER BY inserted_at_ms DESC LIMIT 2",
+        )?;
+        let ids = statement
+            .query_map(
+                params![message_uid.to_be_bytes().to_vec(), i64::from(sequence)],
+                |row| row.get::<_, i64>(0),
+            )?
+            .collect::<Result<Vec<_>, _>>()?;
+        match ids.as_slice() {
+            [] => Ok(None),
+            [id] => {
+                self.get(u32::try_from(*id).map_err(|_error| MessageStoreError::Configuration)?)
+            }
+            _ => Err(MessageStoreError::Configuration),
+        }
     }
 
     /// Removes one retained message after QQ accepts its recall.
@@ -344,10 +413,17 @@ struct StoredRow {
     client_sequence: Option<Vec<u8>>,
     random: Option<i64>,
     timestamp: Option<i64>,
+    quote_sequence: Option<i64>,
+    quote_message_uid: Option<Vec<u8>>,
+    quote_sender_uin: Option<i64>,
+    quote_sender_uid: Option<String>,
+    quote_timestamp: Option<i64>,
+    quote_elements: Option<Vec<u8>>,
 }
 
 impl StoredRow {
     fn into_record(self, message_id: u32) -> Result<MessageRecord, MessageStoreError> {
+        let quote = self.load_quote()?;
         let recall = match self.kind {
             0 if self.no_fields() => RecallTarget::Unavailable,
             1 if self.uid.is_none()
@@ -371,13 +447,47 @@ impl StoredRow {
         };
         let response = serde_json::from_str(&self.response_json)
             .map_err(|_error| MessageStoreError::Configuration)?;
-        MessageRecord::new(
+        let mut record = MessageRecord::new(
             message_id,
             u64::try_from(self.inserted_at_ms)
                 .map_err(|_error| MessageStoreError::Configuration)?,
             response,
             recall,
+        )?;
+        record.quote = quote;
+        Ok(record)
+    }
+
+    fn load_quote(&self) -> Result<Option<QuoteTarget>, MessageStoreError> {
+        let values = [
+            self.quote_sequence.is_some(),
+            self.quote_message_uid.is_some(),
+            self.quote_sender_uin.is_some(),
+            self.quote_sender_uid.is_some(),
+            self.quote_timestamp.is_some(),
+            self.quote_elements.is_some(),
+        ];
+        if values.iter().all(|value| !value) {
+            return Ok(None);
+        }
+        if !values.iter().all(|value| *value) {
+            return Err(MessageStoreError::Configuration);
+        }
+        QuoteTarget::new(
+            from_i64(self.quote_sequence)?,
+            decode_u64(self.quote_message_uid.clone())?,
+            from_i64(self.quote_sender_uin)?,
+            self.quote_sender_uid
+                .clone()
+                .ok_or(MessageStoreError::Configuration)?,
+            from_i64(self.quote_timestamp)?,
+            QuoteTarget::decode_elements(
+                self.quote_elements
+                    .as_deref()
+                    .ok_or(MessageStoreError::Configuration)?,
+            )?,
         )
+        .map(Some)
     }
 
     fn no_fields(&self) -> bool {
@@ -406,18 +516,38 @@ fn migrate(connection: &mut Connection) -> Result<(), MessageStoreError> {
                      sequence BLOB,
                      client_sequence BLOB,
                      random INTEGER,
-                     timestamp INTEGER
+                     timestamp INTEGER,
+                     quote_sequence INTEGER,
+                     quote_message_uid BLOB,
+                     quote_sender_uin INTEGER,
+                     quote_sender_uid TEXT,
+                     quote_timestamp INTEGER,
+                     quote_elements BLOB
                  );
-                 PRAGMA user_version = 2;",
+                 CREATE INDEX messages_quote_correlation
+                     ON messages(quote_message_uid, quote_sequence);
+                 PRAGMA user_version = 3;",
             )?;
             transaction.commit()?;
             Ok(())
         }
-        1 => {
+        1 | 2 => {
             // Schema v1 already reserved the random column for private
             // correlations. Advancing the generation explicitly records that
             // new group rows may use it; existing NULL values stay unavailable.
-            connection.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+            let transaction = connection.transaction()?;
+            transaction.execute_batch(
+                "ALTER TABLE messages ADD COLUMN quote_sequence INTEGER;
+                 ALTER TABLE messages ADD COLUMN quote_message_uid BLOB;
+                 ALTER TABLE messages ADD COLUMN quote_sender_uin INTEGER;
+                 ALTER TABLE messages ADD COLUMN quote_sender_uid TEXT;
+                 ALTER TABLE messages ADD COLUMN quote_timestamp INTEGER;
+                 ALTER TABLE messages ADD COLUMN quote_elements BLOB;
+                 CREATE INDEX messages_quote_correlation
+                     ON messages(quote_message_uid, quote_sequence);
+                 PRAGMA user_version = 3;",
+            )?;
+            transaction.commit()?;
             Ok(())
         }
         SCHEMA_VERSION => Ok(()),

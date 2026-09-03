@@ -96,8 +96,38 @@ pub enum Segment {
     Xml(XmlSegment),
     /// Incoming shake/poke content.
     Poke(PokeSegment),
+    /// Incoming reply reference with stable QQ correlations.
+    Reply(ReplySegment),
     /// A valid element without one unambiguous compiled projection yet.
     Unsupported,
+}
+
+/// QQ correlation carried by an incoming reply element.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReplySegment {
+    sequence: u32,
+    message_uid: u64,
+}
+
+impl ReplySegment {
+    pub(super) const fn new(sequence: u32, message_uid: u64) -> Self {
+        Self {
+            sequence,
+            message_uid,
+        }
+    }
+
+    /// Returns the original QQ message sequence.
+    #[must_use]
+    pub const fn sequence(self) -> u32 {
+        self.sequence
+    }
+
+    /// Returns the original QQ message identifier.
+    #[must_use]
+    pub const fn message_uid(self) -> u64 {
+        self.message_uid
+    }
 }
 
 /// Incoming XML rich content and its QQ service identifier.

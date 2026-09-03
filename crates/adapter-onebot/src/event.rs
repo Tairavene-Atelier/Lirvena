@@ -196,11 +196,23 @@ fn project_message(
     }
     let segments = message
         .rich_text()
-        .map(|rich| rich.elements().iter().map(segment_json).collect())
+        .map(|rich| {
+            rich.elements()
+                .iter()
+                .enumerate()
+                .map(|(index, element)| segment_json(element, message.reply_id(index)))
+                .collect()
+        })
         .unwrap_or_default();
     let raw_message = message
         .rich_text()
-        .map(|rich| rich.elements().iter().map(raw_segment).collect::<String>())
+        .map(|rich| {
+            rich.elements()
+                .iter()
+                .enumerate()
+                .map(|(index, element)| raw_segment(element, message.reply_id(index)))
+                .collect::<String>()
+        })
         .unwrap_or_default();
     let mut object = Map::from_iter([
         ("time".to_owned(), json!(envelope.timestamp().max(0))),
@@ -242,7 +254,7 @@ fn sender_json(route: &qq_message::MessageRoute, user_id: u64, id_format: IdForm
     Value::Object(sender)
 }
 
-fn segment_json(element: &qq_message::RichTextElement) -> Value {
+fn segment_json(element: &qq_message::RichTextElement, reply_id: Option<u32>) -> Value {
     match element.segment() {
         Segment::Text(text) => json!({"type": "text", "data": {"text": text}}),
         Segment::Mention(mention) => {
@@ -267,6 +279,15 @@ fn segment_json(element: &qq_message::RichTextElement) -> Value {
             "type": "poke",
             "data": {"type": poke.kind(), "strength": poke.strength(), "id": -1}
         }),
+        Segment::Reply(_) => reply_id.map_or_else(
+            || {
+                json!({
+                    "type": "lirvena_unsupported",
+                    "data": {"encoded_size": element.encoded().len()}
+                })
+            },
+            |id| json!({"type": "reply", "data": {"id": id}}),
+        ),
         Segment::Unsupported => json!({
             "type": "lirvena_unsupported",
             "data": {"encoded_size": element.encoded().len()}
@@ -284,7 +305,7 @@ fn media_segment(kind: &str, file: &qq_message::MediaFile) -> Value {
     })
 }
 
-fn raw_segment(element: &qq_message::RichTextElement) -> String {
+fn raw_segment(element: &qq_message::RichTextElement, reply_id: Option<u32>) -> String {
     match element.segment() {
         Segment::Text(text) => text.clone(),
         Segment::Mention(mention) => format!("@{}", mention.display()),
@@ -298,6 +319,10 @@ fn raw_segment(element: &qq_message::RichTextElement) -> String {
             "[CQ:poke,type={},strength={}]",
             poke.kind(),
             poke.strength()
+        ),
+        Segment::Reply(_) => reply_id.map_or_else(
+            || "[CQ:lirvena_unsupported]".to_owned(),
+            |id| format!("[CQ:reply,id={id}]"),
         ),
         Segment::Unsupported => "[CQ:lirvena_unsupported]".to_owned(),
     }

@@ -1,7 +1,9 @@
 use std::path::Path;
 
 use account_api::InboundMessage;
-use account_message_store::{MessageRecord, MessageStore, MessageStoreError, RecallTarget};
+use account_message_store::{
+    MessageRecord, MessageStore, MessageStoreError, QuoteTarget, RecallTarget,
+};
 use account_runtime::AccountLocalId;
 use adapter_onebot::{IdFormat, project_message_record};
 use qq_message::{MessageClass, MessageEnvelope, SendTextTarget};
@@ -51,12 +53,38 @@ impl MessageRegistry {
     ) -> Result<(), MessageStoreError> {
         let response = project_message_record(message, IdFormat::Number)
             .map_err(|_error| MessageStoreError::Configuration)?;
-        self.store.put(&MessageRecord::new(
-            message.message_id(),
-            inserted_at_ms,
-            response,
-            recall,
-        )?)
+        let record = MessageRecord::new(message.message_id(), inserted_at_ms, response, recall)?;
+        let record = match inbound_quote(message) {
+            Some(quote) => record.with_quote(quote),
+            None => record,
+        };
+        self.store.put(&record)
+    }
+
+    pub(super) fn resolve_reply_ids(
+        &self,
+        envelope: &MessageEnvelope,
+        rich_text: Option<&qq_message::RichTextMessage>,
+    ) -> Result<Vec<Option<u32>>, MessageStoreError> {
+        let Some(rich_text) = rich_text else {
+            return Ok(Vec::new());
+        };
+        rich_text
+            .elements()
+            .iter()
+            .map(|element| {
+                let qq_message::Segment::Reply(reply) = element.segment() else {
+                    return Ok(None);
+                };
+                self.store
+                    .find_quote(reply.message_uid(), reply.sequence())
+                    .map(|record| {
+                        record
+                            .filter(|record| same_conversation(record.recall(), envelope))
+                            .map(|record| record.message_id())
+                    })
+            })
+            .collect()
     }
 
     pub(super) fn register_outbound(
@@ -154,6 +182,49 @@ fn private_inbound(envelope: &MessageEnvelope) -> RecallTarget {
         client_sequence: u64::from(envelope.direct_message_sequence()),
         random,
         timestamp,
+    }
+}
+
+fn inbound_quote(message: &InboundMessage) -> Option<QuoteTarget> {
+    let envelope = message.envelope();
+    let sequence = match envelope.class() {
+        MessageClass::Group => u32::try_from(envelope.sequence()).ok(),
+        MessageClass::Private => Some(envelope.direct_message_sequence()),
+        _ => None,
+    }?;
+    let message_uid = if envelope.message_uid() != 0 {
+        envelope.message_uid()
+    } else {
+        (0x0100_0000_u64 << 32) | u64::from(wire_u32(envelope.random())?)
+    };
+    let timestamp = u32::try_from(envelope.timestamp()).ok()?;
+    let sender_uid = envelope.route().from_uid.clone()?;
+    let elements = message
+        .rich_text()?
+        .elements()
+        .iter()
+        .map(|element| element.encoded().to_vec())
+        .collect();
+    QuoteTarget::new(
+        sequence,
+        message_uid,
+        envelope.route().from_uin,
+        sender_uid,
+        timestamp,
+        elements,
+    )
+    .ok()
+}
+
+fn same_conversation(recall: &RecallTarget, envelope: &MessageEnvelope) -> bool {
+    match (recall, envelope.class()) {
+        (RecallTarget::Group { group_code, .. }, MessageClass::Group) => {
+            envelope.route().group_uin == Some(*group_code)
+        }
+        (RecallTarget::Private { uid, .. }, MessageClass::Private) => {
+            envelope.route().from_uid.as_deref() == Some(uid)
+        }
+        _ => false,
     }
 }
 

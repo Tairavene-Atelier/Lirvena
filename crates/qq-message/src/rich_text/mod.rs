@@ -9,5 +9,5 @@ pub use decode::decode_rich_text;
 pub use media::{ImageSegment, MediaFile, MediaScope, VideoSegment, VoiceSegment};
 pub use model::{
     FaceKind, FaceSegment, MentionSegment, MentionTarget, OpaqueAttachment, PokeSegment,
-    RichTextElement, RichTextMessage, Segment, XmlSegment,
+    ReplySegment, RichTextElement, RichTextMessage, Segment, XmlSegment,
 };

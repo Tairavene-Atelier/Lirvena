@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use account_api::{AccountActionError, AccountActionRequest, AccountIdentity};
+use account_message_store::{QuoteTarget, RecallTarget};
 use adapter_onebot::{MessageSegment, parse_message};
 use qq_directory::FriendEntry;
 use qq_message::{
@@ -187,8 +188,18 @@ async fn send_private_text(
         .map(|friend| friend.uid.clone())
         .ok_or(AccountActionError::Unsupported)?;
     let target = SendTextTarget::Private { uin, uid: &uid };
-    let segments =
-        compile_segments(request, &target, packets, pushes, resources.media, context).await?;
+    let parsed = parse_segments(request)?;
+    let replies = resolve_reply_segments(&parsed, &target, resources.messages)?;
+    let segments = compile_segments(
+        &parsed,
+        &target,
+        &replies,
+        packets,
+        pushes,
+        resources.media,
+        context,
+    )
+    .await?;
     send_segments(
         target,
         &segments,
@@ -214,8 +225,18 @@ async fn send_group_text(
     }
     let group_code = required_u32(request.params().get("group_id"))?;
     let target = SendTextTarget::Group { group_code };
-    let segments =
-        compile_segments(request, &target, packets, pushes, resources.media, context).await?;
+    let parsed = parse_segments(request)?;
+    let replies = resolve_reply_segments(&parsed, &target, resources.messages)?;
+    let segments = compile_segments(
+        &parsed,
+        &target,
+        &replies,
+        packets,
+        pushes,
+        resources.media,
+        context,
+    )
+    .await?;
     send_segments(
         target,
         &segments,
@@ -367,6 +388,11 @@ enum CompiledSegment {
         kind: u32,
         strength: u32,
     },
+    Reply {
+        message_id: u32,
+        group: bool,
+        quote: QuoteTarget,
+    },
 }
 
 impl CompiledSegment {
@@ -417,6 +443,15 @@ impl CompiledSegment {
                 kind: *kind,
                 strength: *strength,
             },
+            Self::Reply { group, quote, .. } => OutboundSegment::Reply {
+                group: *group,
+                sequence: quote.sequence(),
+                message_uid: quote.message_uid(),
+                sender_uin: quote.sender_uin(),
+                sender_uid: quote.sender_uid(),
+                timestamp: quote.timestamp(),
+                elements: quote.elements(),
+            },
         }
     }
 
@@ -436,18 +471,16 @@ impl CompiledSegment {
             Self::Poke { kind, strength } => {
                 json!({"type": "poke", "data": {"type": kind, "strength": strength, "id": -1}})
             }
+            Self::Reply { message_id, .. } => {
+                json!({"type": "reply", "data": {"id": message_id}})
+            }
         }
     }
 }
 
-async fn compile_segments(
+fn parse_segments(
     request: &AccountActionRequest,
-    target: &SendTextTarget<'_>,
-    packets: &PacketRuntime,
-    pushes: &PushRuntime,
-    media: &mut MediaRuntime,
-    context: &mut OnlineContext<'_>,
-) -> Result<Vec<CompiledSegment>, AccountActionError> {
+) -> Result<Vec<MessageSegment>, AccountActionError> {
     let auto_escape = request
         .params()
         .get("auto_escape")
@@ -458,8 +491,41 @@ async fn compile_segments(
         .params()
         .get("message")
         .ok_or(AccountActionError::BadParameters)?;
-    let segments =
-        parse_message(raw, auto_escape).map_err(|_error| AccountActionError::BadParameters)?;
+    parse_message(raw, auto_escape).map_err(|_error| AccountActionError::BadParameters)
+}
+
+fn resolve_reply_segments(
+    segments: &[MessageSegment],
+    target: &SendTextTarget<'_>,
+    messages: &MessageRegistry,
+) -> Result<BTreeMap<u32, (bool, QuoteTarget)>, AccountActionError> {
+    let mut replies = BTreeMap::new();
+    for segment in segments.iter().filter(|segment| segment.kind() == "reply") {
+        let message_id =
+            segment_u32(segment.data().get("id")).ok_or(AccountActionError::BadParameters)?;
+        if replies.contains_key(&message_id) {
+            continue;
+        }
+        let record = messages
+            .get(message_id)
+            .map_err(|_error| AccountActionError::QqFailure)?
+            .ok_or(AccountActionError::QqFailure)?;
+        let quote = record.quote().ok_or(AccountActionError::QqFailure)?;
+        let group = quote_scope_matches(record.recall(), target)?;
+        replies.insert(message_id, (group, quote.clone()));
+    }
+    Ok(replies)
+}
+
+async fn compile_segments(
+    segments: &[MessageSegment],
+    target: &SendTextTarget<'_>,
+    replies: &BTreeMap<u32, (bool, QuoteTarget)>,
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    media: &mut MediaRuntime,
+    context: &mut OnlineContext<'_>,
+) -> Result<Vec<CompiledSegment>, AccountActionError> {
     let needs_members = segments.iter().any(|segment| {
         segment.kind() == "at" && segment.data().get("qq").and_then(Value::as_str) != Some("all")
     });
@@ -474,28 +540,28 @@ async fn compile_segments(
         (None, true) => return Err(AccountActionError::Unsupported),
         (_, false) => None,
     };
+    let lookups = SegmentLookups {
+        members: members.as_deref(),
+        replies,
+    };
     let mut compiled = Vec::with_capacity(segments.len());
-    for segment in &segments {
+    for segment in segments {
         compiled.push(
-            compile_segment(
-                segment,
-                target,
-                members.as_deref(),
-                packets,
-                pushes,
-                media,
-                context,
-            )
-            .await?,
+            compile_segment(segment, target, &lookups, packets, pushes, media, context).await?,
         );
     }
     Ok(compiled)
 }
 
+struct SegmentLookups<'a> {
+    members: Option<&'a [qq_directory::GroupMember]>,
+    replies: &'a BTreeMap<u32, (bool, QuoteTarget)>,
+}
+
 async fn compile_segment(
     segment: &MessageSegment,
     target: &SendTextTarget<'_>,
-    members: Option<&[qq_directory::GroupMember]>,
+    lookups: &SegmentLookups<'_>,
     packets: &PacketRuntime,
     pushes: &PushRuntime,
     media: &mut MediaRuntime,
@@ -523,7 +589,8 @@ async fn compile_segment(
                 });
             }
             let uin = segment_u32(Some(target)).ok_or(AccountActionError::BadParameters)?;
-            let member = members
+            let member = lookups
+                .members
                 .and_then(|values| values.iter().find(|value| value.uin == uin))
                 .ok_or(AccountActionError::QqFailure)?;
             let name = if member.card.is_empty() {
@@ -627,7 +694,41 @@ async fn compile_segment(
             };
             Ok(CompiledSegment::Poke { kind, strength })
         }
+        "reply" => {
+            let message_id =
+                segment_u32(segment.data().get("id")).ok_or(AccountActionError::BadParameters)?;
+            let (group, quote) = lookups
+                .replies
+                .get(&message_id)
+                .ok_or(AccountActionError::QqFailure)?;
+            Ok(CompiledSegment::Reply {
+                message_id,
+                group: *group,
+                quote: quote.clone(),
+            })
+        }
         _ => Err(AccountActionError::Unsupported),
+    }
+}
+
+fn quote_scope_matches(
+    recall: &RecallTarget,
+    target: &SendTextTarget<'_>,
+) -> Result<bool, AccountActionError> {
+    match (recall, target) {
+        (
+            RecallTarget::Group { group_code, .. },
+            SendTextTarget::Group {
+                group_code: destination,
+            },
+        ) if group_code == destination => Ok(true),
+        (
+            RecallTarget::Private { uid, .. },
+            SendTextTarget::Private {
+                uid: destination, ..
+            },
+        ) if uid == destination => Ok(false),
+        _ => Err(AccountActionError::BadParameters),
     }
 }
 
@@ -639,4 +740,54 @@ fn segment_u32(value: Option<&Value>) -> Option<u32> {
             _ => None,
         })
         .and_then(|value| u32::try_from(value).ok())
+}
+
+#[cfg(test)]
+mod tests {
+    use account_message_store::RecallTarget;
+    use qq_message::SendTextTarget;
+
+    use super::quote_scope_matches;
+
+    #[test]
+    fn reply_scope_cannot_cross_conversations() {
+        let group = RecallTarget::Group {
+            group_code: 42,
+            sequence: 7,
+            random: Some(9),
+        };
+        assert_eq!(
+            quote_scope_matches(&group, &SendTextTarget::Group { group_code: 42 }),
+            Ok(true)
+        );
+        assert!(quote_scope_matches(&group, &SendTextTarget::Group { group_code: 43 }).is_err());
+
+        let private = RecallTarget::Private {
+            uid: "u_peer".to_owned(),
+            sequence: 7,
+            client_sequence: 8,
+            random: 9,
+            timestamp: 10,
+        };
+        assert_eq!(
+            quote_scope_matches(
+                &private,
+                &SendTextTarget::Private {
+                    uin: 11,
+                    uid: "u_peer",
+                },
+            ),
+            Ok(false)
+        );
+        assert!(
+            quote_scope_matches(
+                &private,
+                &SendTextTarget::Private {
+                    uin: 12,
+                    uid: "u_other",
+                },
+            )
+            .is_err()
+        );
+    }
 }

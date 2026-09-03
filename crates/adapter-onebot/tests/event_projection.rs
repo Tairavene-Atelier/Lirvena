@@ -248,6 +248,55 @@ fn rich_segments_project_to_standard_onebot_shapes() -> TestResult {
 }
 
 #[test]
+fn resolved_reply_uses_local_message_id_and_unresolved_reply_stays_honest() -> TestResult {
+    let original = vec![vec![0x0a, 0x02, 0x68, 0x69]];
+    let encoded = encode_message(&SendMessageInput {
+        target: SendTextTarget::Group { group_code: 88 },
+        segments: &[OutboundSegment::Reply {
+            group: true,
+            sequence: 7,
+            message_uid: 9,
+            sender_uin: 42,
+            sender_uid: "u_source",
+            timestamp: 10,
+            elements: &original,
+        }],
+        client_sequence: 11,
+        random: 12,
+        unix_seconds: 13,
+    })?;
+    let rich = OutboundMessageFixture::decode(encoded.as_slice())?
+        .body
+        .and_then(|body| body.rich_text)
+        .ok_or("missing rich text")?;
+    let rich = decode_rich_text(&rich)?;
+    let event = event_with_rich_and_replies(
+        82,
+        Some((88, "member")),
+        None,
+        Some(rich.clone()),
+        vec![Some(55), None],
+    )?;
+    let projected = project_account_event(&event, IdFormat::Number)?.ok_or("missing event")?;
+    assert_eq!(
+        projected["message"][0],
+        json!({"type": "reply", "data": {"id": 55}})
+    );
+    assert!(
+        projected["raw_message"]
+            .as_str()
+            .is_some_and(|value| value.starts_with("[CQ:reply,id=55]"))
+    );
+
+    let unresolved =
+        event_with_rich_and_replies(82, Some((88, "member")), None, Some(rich), vec![None, None])?;
+    let projected =
+        project_account_event(&unresolved, IdFormat::Number)?.ok_or("missing unresolved event")?;
+    assert_eq!(projected["message"][0]["type"], "lirvena_unsupported");
+    Ok(())
+}
+
+#[test]
 fn group_notice_projects_only_resolved_numeric_identities() -> TestResult {
     let identity = identity()?;
     let increase = AccountEvent::GroupNotice(Box::new(ResolvedGroupNotice::new(
@@ -308,6 +357,17 @@ fn event_with_rich(
     friend_name: Option<&str>,
     rich_text: Option<RichTextMessage>,
 ) -> Result<AccountEvent, Box<dyn std::error::Error>> {
+    let reply_ids = vec![None; rich_text.as_ref().map_or(0, |rich| rich.elements().len())];
+    event_with_rich_and_replies(message_type, group, friend_name, rich_text, reply_ids)
+}
+
+fn event_with_rich_and_replies(
+    message_type: u32,
+    group: Option<(u32, &str)>,
+    friend_name: Option<&str>,
+    rich_text: Option<RichTextMessage>,
+    reply_ids: Vec<Option<u32>>,
+) -> Result<AccountEvent, Box<dyn std::error::Error>> {
     let group = group.map(|(group_uin, member_name)| Route {
         group_uin,
         member_name: member_name.to_owned(),
@@ -337,9 +397,9 @@ fn event_with_rich(
         return Err("expected new message".into());
     };
     let identity = identity()?;
-    Ok(AccountEvent::Message(Box::new(InboundMessage::new(
-        identity, 9, *envelope, rich_text,
-    ))))
+    Ok(AccountEvent::Message(Box::new(
+        InboundMessage::new(identity, 9, *envelope, rich_text).with_reply_ids(reply_ids)?,
+    )))
 }
 
 fn identity() -> Result<AccountIdentity, account_api::EventHubError> {

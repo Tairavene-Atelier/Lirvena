@@ -57,12 +57,13 @@ pub struct InboundMessage {
     message_id: u32,
     envelope: MessageEnvelope,
     rich_text: Option<RichTextMessage>,
+    reply_ids: Box<[Option<u32>]>,
 }
 
 impl InboundMessage {
     /// Creates an immutable adapter-facing message event.
     #[must_use]
-    pub const fn new(
+    pub fn new(
         account: AccountIdentity,
         message_id: u32,
         envelope: MessageEnvelope,
@@ -73,7 +74,26 @@ impl InboundMessage {
             message_id,
             envelope,
             rich_text,
+            reply_ids: Box::new([]),
         }
+    }
+
+    /// Attaches account-local identifiers resolved for incoming reply elements.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error unless the mapping is aligned with every decoded rich
+    /// element and contains only non-zero identifiers.
+    pub fn with_reply_ids(mut self, reply_ids: Vec<Option<u32>>) -> Result<Self, EventHubError> {
+        let expected = self
+            .rich_text
+            .as_ref()
+            .map_or(0, |rich| rich.elements().len());
+        if reply_ids.len() != expected || reply_ids.iter().flatten().any(|value| *value == 0) {
+            return Err(EventHubError::InvalidEvent);
+        }
+        self.reply_ids = reply_ids.into_boxed_slice();
+        Ok(self)
     }
 
     /// Returns the account-local `OneBot` message identifier.
@@ -98,6 +118,12 @@ impl InboundMessage {
     #[must_use]
     pub const fn rich_text(&self) -> Option<&RichTextMessage> {
         self.rich_text.as_ref()
+    }
+
+    /// Returns the locally resolved source identifier for one rich element.
+    #[must_use]
+    pub fn reply_id(&self, element_index: usize) -> Option<u32> {
+        self.reply_ids.get(element_index).copied().flatten()
     }
 }
 
