@@ -132,6 +132,9 @@ pub(super) async fn execute_account_action(
         "delete_essence_msg" => {
             essence::update(request, false, packets, pushes, resources.messages, context).await
         }
+        "set_group_reaction" => {
+            super::reaction::update(request, packets, pushes, resources.messages, context).await
+        }
         "send_poke"
         | "group_poke"
         | "friend_poke"
