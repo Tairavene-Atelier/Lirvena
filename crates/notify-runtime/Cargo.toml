@@ -10,7 +10,7 @@ publish = false
 
 [dependencies]
 getrandom = "=0.4.3"
-hmac = "=0.12.1"
+hmac = "=0.13.0"
 html-escape = "=0.2.15"
 lettre = { version = "=0.11.23", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls"] }
 local-state = { version = "=0.0.0", path = "../local-state" }
