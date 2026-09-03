@@ -155,8 +155,11 @@ pub(super) async fn execute_account_action(
         "delete_essence_msg" => {
             essence::update(request, false, packets, pushes, resources.messages, context).await
         }
-        "set_group_reaction" => {
-            super::reaction::update(request, packets, pushes, resources.messages, context).await
+        "set_group_reaction"
+        | "set_msg_emoji_like"
+        | ".join_group_emoji_chain"
+        | ".join_friend_emoji_chain" => {
+            super::reaction::execute(request, packets, pushes, resources.messages, context).await
         }
         "send_poke"
         | "group_poke"
@@ -866,6 +869,7 @@ mod tests {
 
         let private = RecallTarget::Private {
             uid: "u_peer".to_owned(),
+            peer_uin: Some(11),
             sequence: 7,
             client_sequence: 8,
             random: 9,

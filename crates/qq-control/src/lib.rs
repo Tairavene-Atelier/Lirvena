@@ -14,7 +14,7 @@ pub use essence::{delete_group_essence, set_group_essence};
 pub use friend_request::friend_request;
 pub use group_request::group_request;
 pub use poke::poke;
-pub use reaction::group_reaction;
+pub use reaction::{EmojiChainTarget, group_reaction, join_emoji_chain};
 
 const MAX_UID_BYTES: usize = 128;
 const MAX_TEXT_BYTES: usize = 4_096;

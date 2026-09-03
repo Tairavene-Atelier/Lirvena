@@ -92,6 +92,7 @@ mod tests {
         assert_eq!(
             encode_target(&RecallTarget::Private {
                 uid: "u_peer".to_owned(),
+                peer_uin: Some(42),
                 sequence: 55,
                 client_sequence: 1,
                 random: 2,

@@ -64,6 +64,7 @@ mod tests {
         assert!(
             essence_correlation(&RecallTarget::Private {
                 uid: "u_peer".to_owned(),
+                peer_uin: Some(42),
                 sequence: 1,
                 client_sequence: 2,
                 random: 3,

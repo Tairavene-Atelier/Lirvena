@@ -54,18 +54,28 @@ impl MessageRegistry {
             )?,
             RecallTarget::Private {
                 uid,
+                peer_uin: Some(peer_uin),
                 sequence,
                 client_sequence,
                 random,
                 timestamp,
             } => self
                 .store
-                .find_private(uid, *sequence, *client_sequence, *random, *timestamp)?
+                .find_private(
+                    uid,
+                    *peer_uin,
+                    *sequence,
+                    *client_sequence,
+                    *random,
+                    *timestamp,
+                )?
                 .map_or_else(
                     || self.next_id(preferred_id(envelope.sequence())),
                     |record| Ok(record.message_id()),
                 )?,
-            RecallTarget::Unavailable => self.next_id(preferred_id(envelope.sequence()))?,
+            RecallTarget::Private { .. } | RecallTarget::Unavailable => {
+                self.next_id(preferred_id(envelope.sequence()))?
+            }
         };
         Ok((message_id, target))
     }
@@ -78,7 +88,7 @@ impl MessageRegistry {
         inserted_at_ms: u64,
     ) -> Result<InboundMessage, MessageStoreError> {
         let (message_id, recall) = self.prepare_inbound(identity, &envelope)?;
-        let reply_ids = self.resolve_reply_ids(&envelope, rich_text.as_ref())?;
+        let reply_ids = self.resolve_reply_ids(identity, &envelope, rich_text.as_ref())?;
         let message = InboundMessage::new(identity.clone(), message_id, envelope, rich_text)
             .with_reply_ids(reply_ids)
             .map_err(|_error| MessageStoreError::Configuration)?;
@@ -104,6 +114,7 @@ impl MessageRegistry {
 
     pub(super) fn resolve_reply_ids(
         &self,
+        identity: &AccountIdentity,
         envelope: &MessageEnvelope,
         rich_text: Option<&qq_message::RichTextMessage>,
     ) -> Result<Vec<Option<u32>>, MessageStoreError> {
@@ -121,7 +132,9 @@ impl MessageRegistry {
                     .find_quote(reply.message_uid(), reply.sequence())
                     .map(|record| {
                         record
-                            .filter(|record| same_conversation(record.recall(), envelope))
+                            .filter(|record| {
+                                same_conversation(record.recall(), envelope, identity.qq_id())
+                            })
                             .map(|record| record.message_id())
                     })
             })
@@ -143,7 +156,7 @@ impl MessageRegistry {
                     random: (correlations.random != 0).then_some(correlations.random),
                 }
             }
-            SendTextTarget::Private { uid, .. }
+            SendTextTarget::Private { uin, uid }
                 if correlations.sequence != 0
                     && correlations.client_sequence != 0
                     && correlations.random != 0
@@ -151,6 +164,7 @@ impl MessageRegistry {
             {
                 RecallTarget::Private {
                     uid: (*uid).to_owned(),
+                    peer_uin: Some(*uin),
                     sequence: u64::from(correlations.sequence),
                     client_sequence: u64::from(correlations.client_sequence),
                     random: correlations.random,
@@ -216,8 +230,8 @@ pub(super) struct OutboundCorrelations {
 
 fn private_inbound(envelope: &MessageEnvelope, self_uin: u64) -> RecallTarget {
     let route = envelope.route();
-    let uid = private_peer_uid(route, self_uin);
-    let Some(uid) = uid else {
+    let peer = private_peer(route, self_uin);
+    let Some((peer_uin, uid)) = peer else {
         return RecallTarget::Unavailable;
     };
     let Some(random) = wire_u32(envelope.random()) else {
@@ -231,6 +245,7 @@ fn private_inbound(envelope: &MessageEnvelope, self_uin: u64) -> RecallTarget {
     }
     RecallTarget::Private {
         uid,
+        peer_uin: Some(peer_uin),
         sequence: envelope.sequence(),
         client_sequence: u64::from(envelope.direct_message_sequence()),
         random,
@@ -238,11 +253,19 @@ fn private_inbound(envelope: &MessageEnvelope, self_uin: u64) -> RecallTarget {
     }
 }
 
-fn private_peer_uid(route: &MessageRoute, self_uin: u64) -> Option<String> {
+fn private_peer(route: &MessageRoute, self_uin: u64) -> Option<(u32, String)> {
     if u64::from(route.from_uin) == self_uin {
-        route.to_uid.clone()
+        route
+            .to_uid
+            .clone()
+            .filter(|_uid| route.to_uin != 0)
+            .map(|uid| (route.to_uin, uid))
     } else if u64::from(route.to_uin) == self_uin {
-        route.from_uid.clone()
+        route
+            .from_uid
+            .clone()
+            .filter(|_uid| route.from_uin != 0)
+            .map(|uid| (route.from_uin, uid))
     } else {
         None
     }
@@ -279,13 +302,14 @@ fn inbound_quote(message: &InboundMessage) -> Option<QuoteTarget> {
     .ok()
 }
 
-fn same_conversation(recall: &RecallTarget, envelope: &MessageEnvelope) -> bool {
+fn same_conversation(recall: &RecallTarget, envelope: &MessageEnvelope, self_uin: u64) -> bool {
     match (recall, envelope.class()) {
         (RecallTarget::Group { group_code, .. }, MessageClass::Group) => {
             envelope.route().group_uin == Some(*group_code)
         }
         (RecallTarget::Private { uid, .. }, MessageClass::Private) => {
-            envelope.route().from_uid.as_deref() == Some(uid)
+            private_peer(envelope.route(), self_uin)
+                .is_some_and(|(_peer_uin, peer_uid)| peer_uid == *uid)
         }
         _ => false,
     }
@@ -311,7 +335,7 @@ mod tests {
     use qq_message::{MessageRoute, SendTextTarget};
     use serde_json::json;
 
-    use super::{MessageRegistry, OutboundCorrelations, private_peer_uid};
+    use super::{MessageRegistry, OutboundCorrelations, private_peer};
 
     #[test]
     fn private_peer_is_selected_for_both_directions() {
@@ -323,8 +347,8 @@ mod tests {
             ..MessageRoute::default()
         };
         assert_eq!(
-            private_peer_uid(&inbound, 10_001).as_deref(),
-            Some("u_peer")
+            private_peer(&inbound, 10_001),
+            Some((42, "u_peer".to_owned()))
         );
 
         let outbound = MessageRoute {
@@ -335,10 +359,10 @@ mod tests {
             ..MessageRoute::default()
         };
         assert_eq!(
-            private_peer_uid(&outbound, 10_001).as_deref(),
-            Some("u_peer")
+            private_peer(&outbound, 10_001),
+            Some((42, "u_peer".to_owned()))
         );
-        assert_eq!(private_peer_uid(&outbound, 99), None);
+        assert_eq!(private_peer(&outbound, 99), None);
     }
 
     #[test]
