@@ -28,6 +28,10 @@ MP4 视频；媒体统一支持状态目录内的
 收到的 52194 XML 与现代 JSON 合并转发会投影标准 `forward` segment；`get_forward_msg`
 通过 Ceylith 签名的长消息下载、严格 gzip 上限和现有消息解码器返回 OneBot `node`，缺失或
 歧义的 `MultiMsg` 内容不会伪造为空成功。
+`send_group_forward_msg` 与 `send_private_forward_msg` 接受有界的标准自定义 `node`，复用普通
+消息的文本、表情与媒体编译链，经 Ceylith 分别签名上传和最终发送，并只在两次 QQ 回包都
+确认成功后返回 `message_id` 与 `forward_id`；兼容 `send_forward_msg` 仅上传并返回真实资源
+ID，不把上传成功伪装成消息发送成功。
 具有完整群消息关联的新记录还支持标准 `set_essence_msg` 与 `delete_essence_msg`；从旧存储
 代际迁移且缺少 random 的记录不会伪造精华操作。
 目录查询已覆盖好友、群、群成员和标准 `get_stranger_info`；公开资料响应会校验请求 QQ 号，

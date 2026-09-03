@@ -89,6 +89,24 @@ pub(super) async fn execute_account_action(
         "get_forward_msg" => {
             super::long_message::get_forward_message(request, packets, pushes, context).await
         }
+        "send_group_forward_msg" => {
+            super::long_message::send_group_forward_message(
+                request, identity, packets, pushes, resources, context,
+            )
+            .await
+        }
+        "send_forward_msg" => {
+            super::long_message::upload_forward_message(
+                request, identity, packets, pushes, resources, context,
+            )
+            .await
+        }
+        "send_private_forward_msg" => {
+            super::long_message::send_private_forward_message(
+                request, identity, packets, pushes, friends, resources, context,
+            )
+            .await
+        }
         "send_msg" => {
             send_message(
                 request, identity, packets, pushes, friends, resources, context,
@@ -183,13 +201,7 @@ async fn send_private_text(
     context: &mut OnlineContext<'_>,
 ) -> Result<Value, AccountActionError> {
     let uin = required_u32(request.params().get("user_id"))?;
-    if !friends.contains_key(&uin) {
-        directory::refresh_friends(packets, pushes, friends, context).await?;
-    }
-    let uid = friends
-        .get(&uin)
-        .map(|friend| friend.uid.clone())
-        .ok_or(AccountActionError::Unsupported)?;
+    let uid = resolve_private_uid(uin, packets, pushes, friends, context).await?;
     let target = SendTextTarget::Private { uin, uid: &uid };
     let parsed = parse_segments(request)?;
     let replies = resolve_reply_segments(&parsed, &target, resources.messages)?;
@@ -252,7 +264,7 @@ async fn send_group_text(
     .await
 }
 
-async fn send_segments(
+pub(super) async fn send_segments(
     target: SendTextTarget<'_>,
     segments: &[CompiledSegment],
     identity: &AccountIdentity,
@@ -354,7 +366,7 @@ fn outbound_message_record(
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-enum CompiledSegment {
+pub(super) enum CompiledSegment {
     Text(String),
     MentionEveryone {
         display: String,
@@ -383,6 +395,10 @@ enum CompiledSegment {
         compatibility: Vec<u8>,
     },
     Json(String),
+    Forward {
+        resource_id: String,
+        card: String,
+    },
     Xml {
         body: String,
         service_id: i32,
@@ -399,7 +415,7 @@ enum CompiledSegment {
 }
 
 impl CompiledSegment {
-    fn borrowed(&self) -> OutboundSegment<'_> {
+    pub(super) fn borrowed(&self) -> OutboundSegment<'_> {
         match self {
             Self::Text(value) => OutboundSegment::Text(value),
             Self::MentionEveryone { display } => OutboundSegment::MentionEveryone { display },
@@ -438,6 +454,7 @@ impl CompiledSegment {
                 compatibility,
             },
             Self::Json(body) => OutboundSegment::Json(body),
+            Self::Forward { card, .. } => OutboundSegment::Json(card),
             Self::Xml { body, service_id } => OutboundSegment::Xml {
                 body,
                 service_id: *service_id,
@@ -458,6 +475,22 @@ impl CompiledSegment {
         }
     }
 
+    pub(super) fn preview_text(&self) -> &str {
+        match self {
+            Self::Text(value) => value,
+            Self::MentionEveryone { display } | Self::Mention { display, .. } => display,
+            Self::Face(_) => "[表情]",
+            Self::Image { .. } => "[图片]",
+            Self::Record { .. } => "[语音]",
+            Self::Video { .. } => "[视频]",
+            Self::Json(_) => "[JSON消息]",
+            Self::Forward { .. } => "[聊天记录]",
+            Self::Xml { .. } => "[XML消息]",
+            Self::Poke { .. } => "[戳一戳]",
+            Self::Reply { .. } => "[回复]",
+        }
+    }
+
     fn onebot_value(&self) -> Value {
         match self {
             Self::Text(value) => json!({"type": "text", "data": {"text": value}}),
@@ -468,6 +501,9 @@ impl CompiledSegment {
             Self::Record { source, .. } => json!({"type": "record", "data": {"file": source}}),
             Self::Video { source, .. } => json!({"type": "video", "data": {"file": source}}),
             Self::Json(body) => json!({"type": "json", "data": {"data": body}}),
+            Self::Forward { resource_id, .. } => {
+                json!({"type": "forward", "data": {"id": resource_id}})
+            }
             Self::Xml { body, service_id } => {
                 json!({"type": "xml", "data": {"data": body, "service_id": service_id}})
             }
@@ -520,7 +556,7 @@ fn resolve_reply_segments(
     Ok(replies)
 }
 
-async fn compile_segments(
+pub(super) async fn compile_segments(
     segments: &[MessageSegment],
     target: &SendTextTarget<'_>,
     replies: &BTreeMap<u32, (bool, QuoteTarget)>,
@@ -554,6 +590,22 @@ async fn compile_segments(
         );
     }
     Ok(compiled)
+}
+
+pub(super) async fn resolve_private_uid(
+    uin: u32,
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    friends: &mut BTreeMap<u32, FriendEntry>,
+    context: &mut OnlineContext<'_>,
+) -> Result<String, AccountActionError> {
+    if !friends.contains_key(&uin) {
+        directory::refresh_friends(packets, pushes, friends, context).await?;
+    }
+    friends
+        .get(&uin)
+        .map(|friend| friend.uid.clone())
+        .ok_or(AccountActionError::Unsupported)
 }
 
 struct SegmentLookups<'a> {
@@ -748,9 +800,27 @@ fn segment_u32(value: Option<&Value>) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use account_message_store::RecallTarget;
-    use qq_message::SendTextTarget;
+    use qq_message::{OutboundSegment, SendTextTarget};
+    use serde_json::json;
 
-    use super::quote_scope_matches;
+    use super::{CompiledSegment, quote_scope_matches};
+
+    #[test]
+    fn compiled_forward_preserves_onebot_semantics() {
+        let segment = CompiledSegment::Forward {
+            resource_id: "forward-resource".to_owned(),
+            card: "{\"app\":\"com.tencent.multimsg\"}".to_owned(),
+        };
+
+        assert_eq!(
+            segment.onebot_value(),
+            json!({"type": "forward", "data": {"id": "forward-resource"}})
+        );
+        assert_eq!(
+            segment.borrowed(),
+            OutboundSegment::Json("{\"app\":\"com.tencent.multimsg\"}")
+        );
+    }
 
     #[test]
     fn reply_scope_cannot_cross_conversations() {
