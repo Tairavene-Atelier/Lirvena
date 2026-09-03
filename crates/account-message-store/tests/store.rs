@@ -49,6 +49,8 @@ fn records_survive_restart_and_recall_fields_round_trip() -> TestResult {
     let reopened = MessageStore::open(&directory, local_id)?;
     assert_eq!(reopened.get(42)?, Some(record));
     assert_eq!(reopened.get(43)?, Some(group_record));
+    assert_eq!(reopened.find_group(100, 101)?, reopened.get(43)?);
+    assert_eq!(reopened.find_group(100, 999)?, None);
     Ok(())
 }
 
@@ -131,6 +133,27 @@ fn quote_lookup_requires_one_unique_retained_correlation() -> TestResult {
     .with_quote(quote);
     store.put(&second)?;
     assert!(store.find_quote(202, 101).is_err());
+    Ok(())
+}
+
+#[test]
+fn group_sequence_lookup_rejects_ambiguous_correlations() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let directory = root.path().join("private");
+    let mut store = MessageStore::open(&directory, AccountLocalId::from_bytes([13; 16]))?;
+    for (message_id, inserted_at_ms) in [(1, 10), (2, 11)] {
+        store.put(&MessageRecord::new(
+            message_id,
+            inserted_at_ms,
+            json!({"message_id": message_id}),
+            RecallTarget::Group {
+                group_code: 100,
+                sequence: 101,
+                random: None,
+            },
+        )?)?;
+    }
+    assert!(store.find_group(100, 101).is_err());
     Ok(())
 }
 

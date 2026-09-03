@@ -8,6 +8,7 @@ mod model;
 mod notice;
 mod outbound;
 mod proto;
+mod reaction;
 mod read_report;
 mod recall;
 mod recall_response;
@@ -29,6 +30,7 @@ pub use outbound::{
     SendTextTarget, encode_forward_entry, encode_message, encode_text_message,
     parse_send_message_response,
 };
+pub use reaction::{GroupReaction, decode_group_reaction};
 pub use read_report::{ReadReportInput, encode_read_report, validate_read_report_response};
 pub use recall::{
     GroupRecallInput, PrivateRecallInput, encode_group_recall, encode_private_recall,

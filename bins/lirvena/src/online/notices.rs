@@ -1,7 +1,45 @@
-use account_api::{AccountIdentity, ResolvedGroupNotice, ResolvedGroupNoticeKind};
-use qq_message::{GroupNotice, MemberDecreaseKind};
+use account_api::{
+    AccountIdentity, ResolvedGroupNotice, ResolvedGroupNoticeKind, ResolvedGroupReaction,
+};
+use qq_message::{GroupNotice, GroupReaction, MemberDecreaseKind};
 
-use super::{directory, packets::PacketRuntime, push::PushRuntime, runtime::OnlineContext};
+use super::{
+    directory, message_registry::MessageRegistry, packets::PacketRuntime, push::PushRuntime,
+    runtime::OnlineContext,
+};
+
+pub(super) async fn resolve_group_reaction(
+    identity: &AccountIdentity,
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    messages: &mut MessageRegistry,
+    reaction: GroupReaction,
+    occurred_at: u64,
+    context: &mut OnlineContext<'_>,
+) -> Option<ResolvedGroupReaction> {
+    let message_id = messages
+        .find_group_message_id(reaction.group_id(), u64::from(reaction.sequence()))
+        .ok()??;
+    let operator_id = if let Some(value) = parse_uid(reaction.operator_uid()) {
+        value
+    } else {
+        let members = directory::group_members(reaction.group_id(), packets, pushes, context)
+            .await
+            .ok()?;
+        resolve_uid(reaction.operator_uid(), Some(&members))?
+    };
+    ResolvedGroupReaction::new(
+        identity.clone(),
+        u64::from(reaction.group_id()),
+        message_id,
+        operator_id,
+        reaction.is_add(),
+        reaction.code().to_owned(),
+        reaction.count(),
+        occurred_at,
+    )
+    .ok()
+}
 
 pub(super) async fn resolve_group_notice(
     identity: &AccountIdentity,

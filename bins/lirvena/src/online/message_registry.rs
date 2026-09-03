@@ -139,6 +139,16 @@ impl MessageRegistry {
         self.store.get(message_id)
     }
 
+    pub(super) fn find_group_message_id(
+        &self,
+        group_code: u32,
+        sequence: u64,
+    ) -> Result<Option<u32>, MessageStoreError> {
+        self.store
+            .find_group(group_code, sequence)
+            .map(|record| record.map(|record| record.message_id()))
+    }
+
     pub(super) fn remove(&mut self, message_id: u32) -> Result<(), MessageStoreError> {
         self.store.remove(message_id)
     }

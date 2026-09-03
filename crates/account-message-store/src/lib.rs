@@ -314,6 +314,39 @@ impl MessageStore {
         }
     }
 
+    /// Finds the unique retained local message for one QQ group sequence.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for missing correlations, persistence failure, or ambiguous retained rows.
+    pub fn find_group(
+        &self,
+        group_code: u32,
+        sequence: u64,
+    ) -> Result<Option<MessageRecord>, MessageStoreError> {
+        if group_code == 0 || sequence == 0 {
+            return Err(MessageStoreError::Configuration);
+        }
+        let mut statement = self.connection.prepare(
+            "SELECT message_id FROM messages
+             WHERE recall_kind = 1 AND group_code = ?1 AND sequence = ?2
+             ORDER BY inserted_at_ms DESC LIMIT 2",
+        )?;
+        let ids = statement
+            .query_map(
+                params![i64::from(group_code), sequence.to_be_bytes().to_vec()],
+                |row| row.get::<_, i64>(0),
+            )?
+            .collect::<Result<Vec<_>, _>>()?;
+        match ids.as_slice() {
+            [] => Ok(None),
+            [id] => {
+                self.get(u32::try_from(*id).map_err(|_error| MessageStoreError::Configuration)?)
+            }
+            _ => Err(MessageStoreError::Configuration),
+        }
+    }
+
     /// Removes one retained message after QQ accepts its recall.
     ///
     /// # Errors

@@ -51,6 +51,9 @@ pub fn project_account_event(
         }))),
         AccountEvent::Message(message) => project_message(message, id_format).map(Some),
         AccountEvent::GroupNotice(notice) => project_group_notice(notice, id_format).map(Some),
+        AccountEvent::GroupReaction(reaction) => {
+            Ok(Some(project_group_reaction(reaction, id_format)))
+        }
         AccountEvent::GroupRequest(request) => Ok(Some(project_group_request(request, id_format))),
         AccountEvent::FriendRequest(request) => {
             Ok(Some(project_friend_request(request, id_format)))
@@ -59,6 +62,23 @@ pub fn project_account_event(
             Ok(None)
         }
     }
+}
+
+fn project_group_reaction(
+    reaction: &account_api::ResolvedGroupReaction,
+    id_format: IdFormat,
+) -> Value {
+    json!({
+        "time": reaction.occurred_at(),
+        "self_id": id_format.value(reaction.account().qq_id()),
+        "post_type": "notice",
+        "notice_type": "group_msg_emoji_like",
+        "group_id": id_format.value(reaction.group_id()),
+        "user_id": id_format.value(reaction.operator_id()),
+        "message_id": id_format.value(u64::from(reaction.message_id())),
+        "likes": [{"emoji_id": reaction.code(), "count": reaction.count()}],
+        "is_add": reaction.is_add()
+    })
 }
 
 /// Projects one retained incoming message to the standard `get_msg` response data.

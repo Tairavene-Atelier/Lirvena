@@ -6,6 +6,7 @@ mod event;
 mod friend_request;
 mod group;
 mod hub;
+mod reaction;
 mod request;
 
 pub use action::{
@@ -16,4 +17,5 @@ pub use event::{AccountEvent, AccountIdentity, InboundMessage};
 pub use friend_request::{FriendRequestReference, ResolvedFriendRequest};
 pub use group::{ResolvedGroupNotice, ResolvedGroupNoticeKind};
 pub use hub::{AccountEventHub, AccountEventPublisher, AccountEventSubscription, EventHubError};
+pub use reaction::ResolvedGroupReaction;
 pub use request::{GroupRequestKind, GroupRequestReference, ResolvedGroupRequest};

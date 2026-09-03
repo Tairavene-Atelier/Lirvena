@@ -2,7 +2,8 @@
 
 use libfuzzer_sys::fuzz_target;
 use qq_message::{
-    MessageDecoder, decode_rich_text, parse_long_message_receive, parse_long_message_send,
+    MessageDecoder, MessageDisposition, decode_group_reaction, decode_rich_text,
+    parse_long_message_receive, parse_long_message_send,
 };
 use qq_online::{OnlineSyncState, PushProcessor};
 use qq_profile::{PushBehavior, PushPlanEntry};
@@ -23,10 +24,13 @@ fuzz_target!(|data: &[u8]| {
     }
     if selector & 2 != 0 {
         let mut decoder = MessageDecoder::default();
-        if selector & 1 == 0 {
-            let _result = decoder.decode(body);
+        let result = if selector & 1 == 0 {
+            decoder.decode(body)
         } else {
-            let _result = decoder.decode_embedded(body);
+            decoder.decode_embedded(body)
+        };
+        if let Ok(MessageDisposition::New(envelope)) = result {
+            let _result = decode_group_reaction(&envelope);
         }
         return;
     }
