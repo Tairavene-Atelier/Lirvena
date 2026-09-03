@@ -327,7 +327,11 @@ impl OnlineRuntime {
         let (envelope, rich_text) = message.into_parts();
         let message_class = envelope.class();
         let (message_id, recall) = self.messages.prepare_inbound(&envelope)?;
-        let message = InboundMessage::new(self.identity.clone(), message_id, envelope, rich_text);
+        let reply_ids = self
+            .messages
+            .resolve_reply_ids(&envelope, rich_text.as_ref())?;
+        let message = InboundMessage::new(self.identity.clone(), message_id, envelope, rich_text)
+            .with_reply_ids(reply_ids)?;
         self.messages.retain_inbound(&message, recall, now_ms()?)?;
         let _delivered = self
             .events

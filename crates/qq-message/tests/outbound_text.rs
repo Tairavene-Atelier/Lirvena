@@ -282,6 +282,54 @@ fn json_xml_and_poke_use_distinct_qq_elements() -> Result<(), Box<dyn std::error
     Ok(())
 }
 
+#[test]
+fn group_reply_preserves_source_evidence_and_compatibility_mention()
+-> Result<(), Box<dyn std::error::Error>> {
+    let original = vec![vec![0x0a, 0x02, 0x68, 0x69]];
+    let segments = [OutboundSegment::Reply {
+        group: true,
+        sequence: 101,
+        message_uid: 202,
+        sender_uin: 303,
+        sender_uid: "u_sender",
+        timestamp: 404,
+        elements: &original,
+    }];
+    let encoded = encode_message(&SendMessageInput {
+        target: SendTextTarget::Group { group_code: 7 },
+        segments: &segments,
+        client_sequence: 8,
+        random: 9,
+        unix_seconds: 10,
+    })?;
+    let elements = TestMessage::decode(encoded.as_slice())?
+        .body
+        .and_then(|body| body.rich_text)
+        .ok_or("missing rich text")?
+        .elements;
+    assert_eq!(elements.len(), 2);
+    let source = elements[0].source.as_ref().ok_or("missing source")?;
+    assert_eq!(source.sequences, [101]);
+    assert_eq!(source.sender_uin, 303);
+    assert_eq!(source.timestamp, Some(404));
+    assert_eq!(source.elements, original);
+    assert_eq!(source.to_uin, Some(0));
+    let reserve =
+        TestSourceReserve::decode(source.reserve.as_deref().ok_or("missing source reserve")?)?;
+    assert_eq!(reserve.message_uid, 202);
+    assert_eq!(reserve.sender_uid.as_deref(), Some("u_sender"));
+    let mention = MentionExtra::decode(
+        elements[1]
+            .text
+            .as_ref()
+            .and_then(|text| text.reserve.as_deref())
+            .ok_or("missing compatibility mention")?,
+    )?;
+    assert_eq!((mention.kind, mention.uin), (Some(2), Some(0)));
+    assert_eq!(mention.uid.as_deref(), Some("u_sender"));
+    Ok(())
+}
+
 #[derive(Clone, PartialEq, Message)]
 struct TestMessage {
     #[prost(message, optional, tag = "3")]
@@ -318,6 +366,32 @@ struct TestElement {
     light_app: Option<TestLightApp>,
     #[prost(message, optional, tag = "53")]
     common: Option<TestCommon>,
+    #[prost(message, optional, tag = "45")]
+    source: Option<TestSource>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestSource {
+    #[prost(uint32, repeated, tag = "1")]
+    sequences: Vec<u32>,
+    #[prost(uint64, tag = "2")]
+    sender_uin: u64,
+    #[prost(int32, optional, tag = "3")]
+    timestamp: Option<i32>,
+    #[prost(bytes = "vec", repeated, tag = "5")]
+    elements: Vec<Vec<u8>>,
+    #[prost(bytes = "vec", optional, tag = "8")]
+    reserve: Option<Vec<u8>>,
+    #[prost(uint64, optional, tag = "10")]
+    to_uin: Option<u64>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestSourceReserve {
+    #[prost(uint64, tag = "3")]
+    message_uid: u64,
+    #[prost(string, optional, tag = "6")]
+    sender_uid: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Message)]
