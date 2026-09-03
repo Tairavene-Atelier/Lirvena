@@ -6,10 +6,10 @@ use account_api::{
 use qq_control::{
     ControlRequest, friend_like, friend_request, group_admin, group_ban, group_card, group_kick,
     group_leave, group_name, group_request, group_special_title, group_whole_ban,
-    parse_control_response,
+    parse_control_response, poke,
 };
 use qq_directory::FriendEntry;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use super::directory;
 use super::packets::{PacketContext, PacketRuntime};
@@ -26,6 +26,13 @@ pub(super) async fn execute(
     context: &mut OnlineContext<'_>,
 ) -> Result<Value, AccountActionError> {
     let params = request.params();
+    if matches!(request.action(), "send_poke" | "group_poke" | "friend_poke") {
+        let (group, peer_uin, target_uin) = poke_target(request.action(), params)?;
+        let control = poke(group, peer_uin, target_uin)
+            .map_err(|_error| AccountActionError::BadParameters)?;
+        send_control(&control, packets, pushes, context).await?;
+        return Ok(json!({}));
+    }
     if request.action() == "send_like" {
         let user_id = required_u32(params.get("user_id"))?;
         let uid = directory::friend_uid(user_id, packets, pushes, friends, context).await?;
@@ -126,6 +133,33 @@ pub(super) async fn execute(
     Ok(json!({}))
 }
 
+fn poke_target(
+    action: &str,
+    params: &Map<String, Value>,
+) -> Result<(bool, u32, u32), AccountActionError> {
+    let user_id = required_u32(params.get("user_id"))?;
+    let group_id = params
+        .get("group_id")
+        .map(|value| required_u32(Some(value)))
+        .transpose()?;
+    let group = match action {
+        "group_poke" => true,
+        "friend_poke" => false,
+        "send_poke" => group_id.is_some(),
+        _ => return Err(AccountActionError::ActionNotFound),
+    };
+    if group != group_id.is_some() {
+        return Err(AccountActionError::BadParameters);
+    }
+    let peer_uin = group_id.unwrap_or(user_id);
+    let target_uin = params
+        .get("target_id")
+        .map(|value| required_u32(Some(value)))
+        .transpose()?
+        .unwrap_or(user_id);
+    Ok((group, peer_uin, target_uin))
+}
+
 fn validate_request_subtype(
     reference: GroupRequestReference,
     subtype: &str,
@@ -173,4 +207,29 @@ pub(super) async fn send_control(
         .await
         .map_err(|_error| AccountActionError::QqFailure)?;
     parse_control_response(&response).map_err(|_error| AccountActionError::QqFailure)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::{Map, json};
+
+    use super::poke_target;
+
+    #[test]
+    fn poke_aliases_share_one_strict_target_parser() -> Result<(), Box<dyn std::error::Error>> {
+        let friend = Map::from_iter([("user_id".to_owned(), json!(42))]);
+        assert_eq!(poke_target("friend_poke", &friend)?, (false, 42, 42));
+        assert_eq!(poke_target("send_poke", &friend)?, (false, 42, 42));
+
+        let group = Map::from_iter([
+            ("user_id".to_owned(), json!(43)),
+            ("group_id".to_owned(), json!(44)),
+            ("target_id".to_owned(), json!(45)),
+        ]);
+        assert_eq!(poke_target("group_poke", &group)?, (true, 44, 45));
+        assert_eq!(poke_target("send_poke", &group)?, (true, 44, 45));
+        assert!(poke_target("friend_poke", &group).is_err());
+        assert!(poke_target("group_poke", &friend).is_err());
+        Ok(())
+    }
 }

@@ -32,6 +32,8 @@ MP4 视频；媒体统一支持状态目录内的
 消息的文本、表情与媒体编译链，经 Ceylith 分别签名上传和最终发送，并只在两次 QQ 回包都
 确认成功后返回 `message_id` 与 `forward_id`；兼容 `send_forward_msg` 仅上传并返回真实资源
 ID，不把上传成功伪装成消息发送成功。
+Lagrange 兼容的 `send_poke`、`group_poke` 与 `friend_poke` 使用独立 QQ 戳一戳请求，并在 QQ
+明确确认后才返回成功。
 具有完整群消息关联的新记录还支持标准 `set_essence_msg` 与 `delete_essence_msg`；从旧存储
 代际迁移且缺少 random 的记录不会伪造精华操作。
 目录查询已覆盖好友、群、群成员和标准 `get_stranger_info`；公开资料响应会校验请求 QQ 号，
