@@ -5,8 +5,9 @@ use account_api::AccountActionError;
 use qq_highway::{HighwayClient, HighwaySession, UploadIdentity};
 use qq_media::{
     MediaPolicy, MediaReference, MediaResolver, MediaTarget, RemoteMediaPolicy,
-    RichMediaUploadPlan, analyze_image, encode_image_metadata_request,
-    encode_record_metadata_request, parse_image_metadata_response, parse_record_metadata_response,
+    RichMediaUploadPlan, analyze_image, analyze_video, default_video_thumbnail,
+    encode_image_metadata_request, encode_record_metadata_request, encode_video_metadata_request,
+    parse_image_metadata_response, parse_record_metadata_response, parse_video_metadata_response,
     prepare_record,
 };
 
@@ -15,7 +16,7 @@ use super::push::PushRuntime;
 use super::runtime::OnlineContext;
 use crate::support::random_nonzero_u32;
 
-const MAX_IMAGE_BYTES: usize = 50 * 1024 * 1024;
+const MAX_MEDIA_BYTES: usize = 256 * 1024 * 1024;
 const SESSION_LIFETIME: Duration = Duration::from_hours(12);
 
 pub(super) struct UploadedImage {
@@ -27,6 +28,12 @@ pub(super) struct UploadedImage {
 pub(super) struct UploadedRecord {
     pub group: bool,
     pub message_info: Vec<u8>,
+}
+
+pub(super) struct UploadedVideo {
+    pub group: bool,
+    pub message_info: Vec<u8>,
+    pub compatibility: Vec<u8>,
 }
 
 pub(super) struct MediaRuntime {
@@ -41,7 +48,7 @@ impl MediaRuntime {
         let policy = MediaPolicy::new(
             vec![state_directory.to_owned()],
             Some(state_directory.join("media-cache")),
-            MAX_IMAGE_BYTES,
+            MAX_MEDIA_BYTES,
             Some(remote),
         )?;
         Ok(Self {
@@ -85,7 +92,7 @@ impl MediaRuntime {
             .map_err(|_error| AccountActionError::QqFailure)?;
         let plan = parse_image_metadata_response(&response, &target)
             .map_err(|_error| AccountActionError::QqFailure)?;
-        self.complete_upload(&plan, object.bytes(), packets, pushes, context)
+        self.complete_upload(&plan, &[object.bytes()], packets, pushes, context)
             .await?;
         let (message_info, compatibility) = plan.into_message_material();
         Ok(UploadedImage {
@@ -129,7 +136,7 @@ impl MediaRuntime {
             .map_err(|_error| AccountActionError::QqFailure)?;
         let plan = parse_record_metadata_response(&response, &target)
             .map_err(|_error| AccountActionError::QqFailure)?;
-        self.complete_upload(&plan, record.bytes(), packets, pushes, context)
+        self.complete_upload(&plan, &[record.bytes()], packets, pushes, context)
             .await?;
         let (message_info, _compatibility) = plan.into_message_material();
         Ok(UploadedRecord {
@@ -138,15 +145,75 @@ impl MediaRuntime {
         })
     }
 
+    pub(super) async fn upload_video(
+        &mut self,
+        reference: &str,
+        target: MediaTarget<'_>,
+        packets: &PacketRuntime,
+        pushes: &PushRuntime,
+        context: &mut OnlineContext<'_>,
+    ) -> Result<UploadedVideo, AccountActionError> {
+        let reference =
+            MediaReference::parse(reference).map_err(|_error| AccountActionError::BadParameters)?;
+        let object = self
+            .resolver
+            .resolve(&reference)
+            .await
+            .map_err(|_error| AccountActionError::QqFailure)?;
+        let video =
+            analyze_video(object.bytes()).map_err(|_error| AccountActionError::BadParameters)?;
+        let thumbnail_bytes = default_video_thumbnail();
+        let thumbnail =
+            analyze_image(thumbnail_bytes).map_err(|_error| AccountActionError::QqFailure)?;
+        let request = encode_video_metadata_request(
+            target,
+            &video,
+            &thumbnail,
+            random_nonzero_u32().map_err(|_error| AccountActionError::QqFailure)?,
+        )
+        .map_err(|_error| AccountActionError::BadParameters)?;
+        let response = packets
+            .send_with_reserve(
+                PacketContext::for_account(context, pushes.plan()),
+                request.command(),
+                &[],
+                request.body(),
+            )
+            .await
+            .map_err(|_error| AccountActionError::QqFailure)?;
+        let plan = parse_video_metadata_response(&response, &target)
+            .map_err(|_error| AccountActionError::QqFailure)?;
+        self.complete_upload(
+            &plan,
+            &[object.bytes(), thumbnail_bytes],
+            packets,
+            pushes,
+            context,
+        )
+        .await?;
+        let (message_info, compatibility) = plan.into_message_material();
+        Ok(UploadedVideo {
+            group: matches!(target, MediaTarget::Group(_)),
+            message_info,
+            compatibility,
+        })
+    }
+
     async fn complete_upload(
         &mut self,
         plan: &RichMediaUploadPlan,
-        bytes: &[u8],
+        files: &[&[u8]],
         packets: &PacketRuntime,
         pushes: &PushRuntime,
         context: &mut OnlineContext<'_>,
     ) -> Result<(), AccountActionError> {
-        if let Some(extension) = plan.highway_extension() {
+        for upload in plan.uploads() {
+            let bytes = files
+                .get(upload.file_index())
+                .ok_or(AccountActionError::QqFailure)?;
+            let extension = upload
+                .extension_for(bytes)
+                .map_err(|_error| AccountActionError::QqFailure)?;
             self.ensure_session(packets, pushes, context).await?;
             let session = self
                 .session
@@ -162,8 +229,8 @@ impl MediaRuntime {
                         sub_app_id: context.profile.sub_app_id(),
                         login_signature: context.credential.secrets().tgt(),
                     },
-                    plan.command_id(),
-                    extension,
+                    upload.command_id(),
+                    &extension,
                     bytes,
                 )
                 .await

@@ -184,6 +184,18 @@ pub(super) struct UploadResponse {
     pub message_info: Vec<u8>,
     #[prost(bytes = "vec", tag = "8")]
     pub compatibility_message: Vec<u8>,
+    #[prost(message, repeated, tag = "10")]
+    pub sub_files: Vec<SubFileInfo>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub(super) struct SubFileInfo {
+    #[prost(uint32, tag = "1")]
+    pub sub_file_type: u32,
+    #[prost(string, tag = "2")]
+    pub upload_key: String,
+    #[prost(message, repeated, tag = "4")]
+    pub ipv4: Vec<Ipv4>,
 }
 
 #[derive(Clone, Copy, PartialEq, Message)]

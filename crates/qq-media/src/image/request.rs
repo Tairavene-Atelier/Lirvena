@@ -1,5 +1,7 @@
 use super::{ImageDescriptor, ImageMetadataRequest, upper_hex};
-use crate::image_proto::{FileInfo, FileType, PictureBusiness, VideoBusiness, VoiceBusiness};
+use crate::image_proto::{
+    FileInfo, FileType, PictureBusiness, UploadInfo, VideoBusiness, VoiceBusiness,
+};
 use crate::rich_request::{RichRequestSpec, encode};
 use crate::{MediaError, MediaTarget};
 
@@ -35,22 +37,25 @@ pub fn encode_image_metadata_request(
         direct_route: ("OidbSvcTrpcTcp.0x11c5_100", 0x11c5),
         group_route: ("OidbSvcTrpcTcp.0x11c4_100", 0x11c4),
         business_type: 1,
-        file: FileInfo {
-            size: image.size,
-            md5: md5.clone(),
-            sha1: upper_hex(&image.sha1),
-            name: format!("{md5}{}", image.format.extension()),
-            kind: Some(FileType {
-                kind: 1,
-                picture_format: image.format.qq_code(),
-                video_format: 0,
-                voice_format: 0,
+        files: vec![UploadInfo {
+            file: Some(FileInfo {
+                size: image.size,
+                md5: md5.clone(),
+                sha1: upper_hex(&image.sha1),
+                name: format!("{md5}{}", image.format.extension()),
+                kind: Some(FileType {
+                    kind: 1,
+                    picture_format: image.format.qq_code(),
+                    video_format: 0,
+                    voice_format: 0,
+                }),
+                width: image.width,
+                height: image.height,
+                duration: 0,
+                original: 1,
             }),
-            width: image.width,
-            height: image.height,
-            duration: 0,
-            original: 1,
-        },
+            sub_file_type: 0,
+        }],
         picture: PictureBusiness {
             business_type: 0,
             summary: String::new(),
