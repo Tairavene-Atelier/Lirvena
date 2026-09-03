@@ -87,6 +87,43 @@ pub fn project_message_record(
     Ok(Value::Object(record))
 }
 
+/// Projects one decoded QQ long-message entry to a standard `OneBot` forward node.
+///
+/// # Errors
+///
+/// Returns an error when the entry lacks a numeric sender identity.
+pub fn project_forward_node(
+    envelope: &qq_message::MessageEnvelope,
+    rich_text: Option<&qq_message::RichTextMessage>,
+) -> Result<Value, EventProjectionError> {
+    let sender = envelope.route().from_uin;
+    if sender == 0 {
+        return Err(EventProjectionError);
+    }
+    let nickname = envelope
+        .route()
+        .friend_name
+        .as_deref()
+        .or(envelope.route().member_name.as_deref())
+        .unwrap_or_default();
+    let content: Vec<Value> = rich_text
+        .map(|rich| {
+            rich.elements()
+                .iter()
+                .map(|element| segment_json(element, None))
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(json!({
+        "type": "node",
+        "data": {
+            "user_id": sender.to_string(),
+            "nickname": nickname,
+            "content": content
+        }
+    }))
+}
+
 fn project_friend_request(request: &ResolvedFriendRequest, id_format: IdFormat) -> Value {
     json!({
         "time": request.occurred_at(),
@@ -288,6 +325,9 @@ fn segment_json(element: &qq_message::RichTextElement, reply_id: Option<u32>) ->
             },
             |id| json!({"type": "reply", "data": {"id": id}}),
         ),
+        Segment::Forward(forward) => {
+            json!({"type": "forward", "data": {"id": forward.resource_id()}})
+        }
         Segment::Unsupported => json!({
             "type": "lirvena_unsupported",
             "data": {"encoded_size": element.encoded().len()}
@@ -324,6 +364,7 @@ fn raw_segment(element: &qq_message::RichTextElement, reply_id: Option<u32>) -> 
             || "[CQ:lirvena_unsupported]".to_owned(),
             |id| format!("[CQ:reply,id={id}]"),
         ),
+        Segment::Forward(forward) => format!("[CQ:forward,id={}]", forward.resource_id()),
         Segment::Unsupported => "[CQ:lirvena_unsupported]".to_owned(),
     }
 }

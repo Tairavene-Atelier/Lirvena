@@ -1,8 +1,8 @@
 use prost::Message;
 
 use super::model::{
-    FaceKind, FaceSegment, MentionSegment, MentionTarget, PokeSegment, ReplySegment,
-    RichTextElement, RichTextMessage, Segment, XmlSegment,
+    FaceKind, FaceSegment, ForwardSegment, MentionSegment, MentionTarget, PokeSegment,
+    ReplySegment, RichTextElement, RichTextMessage, Segment, XmlSegment,
 };
 use super::proto::{
     AnimatedFaceWire, CommonWire, ElementWire, FaceWire, LightAppWire, MentionWire,
@@ -210,18 +210,60 @@ fn decode_rich_message(input: &[u8]) -> Result<Option<Segment>, MessageDecodeErr
         Some(1) => crate::rich_content::decompress(&wire.template)
             .map(Segment::Json)
             .map(Some),
-        Some(35) => crate::rich_content::decompress(&wire.template)
-            .map(|body| Segment::Xml(XmlSegment::new(body, 35)))
-            .map(Some),
+        Some(35) => crate::rich_content::decompress(&wire.template).map(|body| {
+            Some(forward_from_xml(&body).map_or_else(
+                || Segment::Xml(XmlSegment::new(body, 35)),
+                |resource_id| Segment::Forward(ForwardSegment::new(resource_id)),
+            ))
+        }),
         _ => Ok(None),
     }
 }
 
 fn decode_light_app(input: &[u8]) -> Result<Option<Segment>, MessageDecodeError> {
     let wire = LightAppWire::decode(input).map_err(|_error| MessageDecodeError)?;
-    crate::rich_content::decompress(&wire.data)
-        .map(Segment::Json)
-        .map(Some)
+    crate::rich_content::decompress(&wire.data).map(|body| {
+        Some(forward_from_json(&body).map_or_else(
+            || Segment::Json(body),
+            |resource_id| Segment::Forward(ForwardSegment::new(resource_id)),
+        ))
+    })
+}
+
+fn forward_from_json(body: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+    if value.get("app")?.as_str()? != "com.tencent.multimsg" {
+        return None;
+    }
+    valid_resource_id(value.pointer("/meta/detail/resid")?.as_str()?)
+}
+
+fn forward_from_xml(body: &str) -> Option<String> {
+    use quick_xml::events::Event;
+
+    let mut reader = quick_xml::Reader::from_str(body);
+    loop {
+        match reader.read_event().ok()? {
+            Event::Start(element) | Event::Empty(element) if element.name().as_ref() == "msg" => {
+                return element
+                    .attributes()
+                    .filter_map(Result::ok)
+                    .find(|attribute| attribute.key.as_ref() == "m_resid")
+                    .and_then(|attribute| {
+                        attribute
+                            .normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                            .ok()
+                    })
+                    .and_then(|value| valid_resource_id(value.as_ref()));
+            }
+            Event::Eof => return None,
+            _ => {}
+        }
+    }
+}
+
+fn valid_resource_id(value: &str) -> Option<String> {
+    crate::long_message::valid_resource_id(value).then(|| value.to_owned())
 }
 
 fn valid_text(value: &str, maximum: usize) -> bool {

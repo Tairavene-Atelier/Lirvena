@@ -2,6 +2,7 @@ mod actions;
 mod controls;
 mod directory;
 mod essence;
+mod long_message;
 mod media;
 mod message_recall;
 mod message_registry;

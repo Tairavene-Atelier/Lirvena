@@ -86,6 +86,9 @@ pub(super) async fn execute_account_action(
             super::requests::list_friend_requests(identity, packets, pushes, context).await
         }
         "get_msg" => get_message(request, resources.messages),
+        "get_forward_msg" => {
+            super::long_message::get_forward_message(request, packets, pushes, context).await
+        }
         "send_msg" => {
             send_message(
                 request, identity, packets, pushes, friends, resources, context,

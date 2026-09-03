@@ -25,6 +25,9 @@ MP4 视频；媒体统一支持状态目录内的
 `reply` 可在重启后真实引用，无法唯一反查的入站回复仍显式标记为未支持。仍在保留范围内的群聊与私聊 `delete_msg` 会跨进程重启复用原始 QQ
 关联字段真实撤回，`mark_msg_as_read` 会复用同一持久关联提交 QQ 已读报告。缺少关联证据、
 已淘汰的 ID 或未确认成功的 QQ 回包都会明确失败。
+收到的 52194 XML 与现代 JSON 合并转发会投影标准 `forward` segment；`get_forward_msg`
+通过 Ceylith 签名的长消息下载、严格 gzip 上限和现有消息解码器返回 OneBot `node`，缺失或
+歧义的 `MultiMsg` 内容不会伪造为空成功。
 具有完整群消息关联的新记录还支持标准 `set_essence_msg` 与 `delete_essence_msg`；从旧存储
 代际迁移且缺少 random 的记录不会伪造精华操作。
 目录查询已覆盖好友、群、群成员和标准 `get_stranger_info`；公开资料响应会校验请求 QQ 号，

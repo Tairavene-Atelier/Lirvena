@@ -1,12 +1,22 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use qq_message::{MessageDecoder, decode_rich_text};
+use qq_message::{
+    MessageDecoder, decode_rich_text, parse_long_message_receive, parse_long_message_send,
+};
 use qq_online::{OnlineSyncState, PushProcessor};
 use qq_profile::{PushBehavior, PushPlanEntry};
 
 fuzz_target!(|data: &[u8]| {
     let (selector, body) = data.split_first().unwrap_or((&0, &[]));
+    if selector & 8 != 0 {
+        if selector & 1 == 0 {
+            let _result = parse_long_message_receive(body);
+        } else {
+            let _result = parse_long_message_send(body);
+        }
+        return;
+    }
     if selector & 4 != 0 {
         let _result = decode_rich_text(body);
         return;

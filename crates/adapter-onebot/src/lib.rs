@@ -14,7 +14,9 @@ mod transport;
 pub use action::{ActionMode, ActionRequest};
 pub use backend::{AccountChannelBackend, BackendCall, BackendError, OneBotBackend};
 pub use dispatch::{DispatcherConfig, OneBotDispatcher};
-pub use event::{EventProjectionError, project_account_event, project_message_record};
+pub use event::{
+    EventProjectionError, project_account_event, project_forward_node, project_message_record,
+};
 pub use id::IdFormat;
 pub use message::{MessageParseError, MessageSegment, parse_message};
 pub use response::ActionResponse;
