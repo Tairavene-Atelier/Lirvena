@@ -1,12 +1,7 @@
-use prost::Message;
-
-use super::{ImageDescriptor, ImageMetadataRequest, ImageTarget, upper_hex, valid_uid};
-use crate::MediaError;
-use crate::image_proto::{
-    BusinessInfo, ClientMeta, CommonHead, DirectTarget, FileInfo, FileType, GroupTarget,
-    PictureBusiness, RequestHead, RichRequest, Scene, UploadInfo, UploadRequest, VideoBusiness,
-    VoiceBusiness,
-};
+use super::{ImageDescriptor, ImageMetadataRequest, upper_hex};
+use crate::image_proto::{FileInfo, FileType, PictureBusiness, VideoBusiness, VoiceBusiness};
+use crate::rich_request::{RichRequestSpec, encode};
+use crate::{MediaError, MediaTarget};
 
 const DIRECT_RESERVE: &[u8] = &[
     0x08, 0x00, 0x18, 0x00, 0x20, 0x00, 0x42, 0x00, 0x50, 0x00, 0x62, 0x00, 0x92, 0x01, 0x00, 0x9a,
@@ -25,110 +20,59 @@ const GROUP_RESERVE: &[u8] = &[
 ///
 /// Returns an error for an invalid target or zero client random value.
 pub fn encode_image_metadata_request(
-    target: ImageTarget<'_>,
+    target: MediaTarget<'_>,
     image: &ImageDescriptor,
     client_random_id: u32,
 ) -> Result<ImageMetadataRequest, MediaError> {
-    if client_random_id == 0 {
-        return Err(MediaError::ReferenceRejected);
-    }
-    let (command, oidb_command, scene_type, direct, group, reserve) = scene(target)?;
     let md5 = upper_hex(&image.md5);
-    let inner = RichRequest {
-        head: Some(RequestHead {
-            common: Some(CommonHead {
-                request_id: 1,
-                command: 100,
+    let reserve = match target {
+        MediaTarget::Direct(_) => DIRECT_RESERVE,
+        MediaTarget::Group(_) => GROUP_RESERVE,
+    };
+    let encoded = encode(RichRequestSpec {
+        target,
+        client_random_id,
+        direct_route: ("OidbSvcTrpcTcp.0x11c5_100", 0x11c5),
+        group_route: ("OidbSvcTrpcTcp.0x11c4_100", 0x11c4),
+        business_type: 1,
+        file: FileInfo {
+            size: image.size,
+            md5: md5.clone(),
+            sha1: upper_hex(&image.sha1),
+            name: format!("{md5}{}", image.format.extension()),
+            kind: Some(FileType {
+                kind: 1,
+                picture_format: image.format.qq_code(),
+                video_format: 0,
+                voice_format: 0,
             }),
-            scene: Some(Scene {
-                request_type: 2,
-                business_type: 1,
-                kind: scene_type,
-                direct,
-                group,
-            }),
-            client: Some(ClientMeta { agent_type: 2 }),
-        }),
-        upload: Some(UploadRequest {
-            files: vec![UploadInfo {
-                file: Some(FileInfo {
-                    size: image.size,
-                    md5: md5.clone(),
-                    sha1: upper_hex(&image.sha1),
-                    name: format!("{md5}{}", image.format.extension()),
-                    kind: Some(FileType {
-                        kind: 1,
-                        picture_format: image.format.qq_code(),
-                        video_format: 0,
-                        voice_format: 0,
-                    }),
-                    width: image.width,
-                    height: image.height,
-                    duration: 0,
-                    original: 1,
-                }),
-                sub_file_type: 0,
-            }],
-            try_fast_upload: true,
-            server_sends_message: false,
-            client_random_id: u64::from(client_random_id),
-            compatibility_scene: scene_type,
-            business: Some(BusinessInfo {
-                picture: Some(PictureBusiness {
-                    business_type: 0,
-                    summary: String::new(),
-                    reserve: reserve.to_vec(),
-                }),
-                video: Some(VideoBusiness {
-                    reserve: Vec::new(),
-                }),
-                voice: Some(VoiceBusiness {
-                    reserve: Vec::new(),
-                    protobuf_reserve: Vec::new(),
-                    general_flags: Vec::new(),
-                }),
-            }),
-            client_sequence: 10,
-            no_compatibility_message: false,
-        }),
-    }
-    .encode_to_vec();
-    let body = qq_wire::encode_oidb_request(oidb_command, 100, &inner, 1)
-        .map_err(|_error| MediaError::ReferenceRejected)?;
-    Ok(ImageMetadataRequest { command, body })
+            width: image.width,
+            height: image.height,
+            duration: 0,
+            original: 1,
+        },
+        picture: PictureBusiness {
+            business_type: 0,
+            summary: String::new(),
+            reserve: reserve.to_vec(),
+        },
+        video: VideoBusiness {
+            reserve: Vec::new(),
+        },
+        direct_voice: empty_voice(),
+        group_voice: empty_voice(),
+    })?;
+    Ok(ImageMetadataRequest {
+        command: encoded.command,
+        body: encoded.body,
+    })
 }
 
-type SceneParts = (
-    &'static str,
-    u32,
-    u32,
-    Option<DirectTarget>,
-    Option<GroupTarget>,
-    &'static [u8],
-);
-
-fn scene(target: ImageTarget<'_>) -> Result<SceneParts, MediaError> {
-    match target {
-        ImageTarget::Direct(uid) if valid_uid(uid) => Ok((
-            "OidbSvcTrpcTcp.0x11c5_100",
-            0x11c5,
-            1,
-            Some(DirectTarget {
-                account_type: 2,
-                uid: uid.to_owned(),
-            }),
-            None,
-            DIRECT_RESERVE,
-        )),
-        ImageTarget::Group(group_code) if group_code != 0 => Ok((
-            "OidbSvcTrpcTcp.0x11c4_100",
-            0x11c4,
-            2,
-            None,
-            Some(GroupTarget { group_code }),
-            GROUP_RESERVE,
-        )),
-        ImageTarget::Direct(_) | ImageTarget::Group(_) => Err(MediaError::ReferenceRejected),
+fn empty_voice() -> VoiceBusiness {
+    VoiceBusiness {
+        reserve: Vec::new(),
+        protobuf_reserve: Vec::new(),
+        general_flags: Vec::new(),
     }
 }
 
@@ -137,14 +81,15 @@ mod tests {
     use prost::Message;
 
     use super::encode_image_metadata_request;
-    use crate::image::{ImageDescriptor, ImageFormat, ImageTarget};
+    use crate::MediaTarget;
+    use crate::image::{ImageDescriptor, ImageFormat};
     use crate::image_proto::RichRequest;
 
     #[test]
     fn group_request_matches_audited_scene_and_file_fields()
     -> Result<(), Box<dyn std::error::Error>> {
         let request = encode_image_metadata_request(
-            ImageTarget::Group(42),
+            MediaTarget::Group(42),
             &ImageDescriptor {
                 size: 123,
                 width: 10,

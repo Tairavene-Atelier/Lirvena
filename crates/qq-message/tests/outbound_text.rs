@@ -179,6 +179,34 @@ fn image_without_compatibility_uses_only_modern_element() -> Result<(), Box<dyn 
     Ok(())
 }
 
+#[test]
+fn record_uses_only_the_modern_voice_business_type() -> Result<(), Box<dyn std::error::Error>> {
+    let segments = [OutboundSegment::Record {
+        group: true,
+        message_info: &[0x08, 0x01],
+    }];
+    let encoded = encode_message(&SendMessageInput {
+        target: SendTextTarget::Group { group_code: 7 },
+        segments: &segments,
+        client_sequence: 8,
+        random: 9,
+        unix_seconds: 10,
+    })?;
+    let elements = TestMessage::decode(encoded.as_slice())?
+        .body
+        .and_then(|body| body.rich_text)
+        .ok_or("missing rich text")?
+        .elements;
+    assert_eq!(elements.len(), 1);
+    let common = elements[0]
+        .common
+        .as_ref()
+        .ok_or("missing common element")?;
+    assert_eq!((common.service_type, common.business_type), (48, 22));
+    assert_eq!(common.protobuf, [0x08, 0x01]);
+    Ok(())
+}
+
 #[derive(Clone, PartialEq, Message)]
 struct TestMessage {
     #[prost(message, optional, tag = "3")]
