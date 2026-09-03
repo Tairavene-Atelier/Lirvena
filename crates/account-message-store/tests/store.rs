@@ -18,6 +18,7 @@ fn records_survive_restart_and_recall_fields_round_trip() -> TestResult {
         json!({"message_id": 42, "message": []}),
         RecallTarget::Private {
             uid: "u_peer".to_owned(),
+            peer_uin: Some(42),
             sequence: u64::MAX,
             client_sequence: 700,
             random: 99,
@@ -164,6 +165,7 @@ fn private_lookup_requires_one_complete_unique_correlation() -> TestResult {
     let mut store = MessageStore::open(&directory, AccountLocalId::from_bytes([14; 16]))?;
     let target = RecallTarget::Private {
         uid: "u_peer".to_owned(),
+        peer_uin: Some(42),
         sequence: 101,
         client_sequence: 102,
         random: 103,
@@ -172,10 +174,10 @@ fn private_lookup_requires_one_complete_unique_correlation() -> TestResult {
     let first = MessageRecord::new(1, 10, json!({"message_id": 1}), target.clone())?;
     store.put(&first)?;
     assert_eq!(
-        store.find_private("u_peer", 101, 102, 103, 104)?,
+        store.find_private("u_peer", 42, 101, 102, 103, 104)?,
         Some(first)
     );
-    assert_eq!(store.find_private("u_peer", 101, 102, 103, 105)?, None);
+    assert_eq!(store.find_private("u_peer", 42, 101, 102, 103, 105)?, None);
 
     store.put(&MessageRecord::new(
         2,
@@ -183,8 +185,12 @@ fn private_lookup_requires_one_complete_unique_correlation() -> TestResult {
         json!({"message_id": 2}),
         target,
     )?)?;
-    assert!(store.find_private("u_peer", 101, 102, 103, 104).is_err());
-    assert!(store.find_private("", 101, 102, 103, 104).is_err());
+    assert!(
+        store
+            .find_private("u_peer", 42, 101, 102, 103, 104)
+            .is_err()
+    );
+    assert!(store.find_private("", 42, 101, 102, 103, 104).is_err());
     Ok(())
 }
 
@@ -233,7 +239,58 @@ fn schema_one_group_records_migrate_without_inventing_random() -> TestResult {
     let connection = Connection::open(path)?;
     assert_eq!(
         connection.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))?,
-        3
+        4
+    );
+    Ok(())
+}
+
+#[test]
+fn schema_three_private_records_migrate_without_inventing_peer_uin() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let directory = root.path().join("private");
+    let local_id = AccountLocalId::from_bytes([15; 16]);
+    let record = MessageRecord::new(
+        9,
+        10,
+        json!({"message_id": 9}),
+        RecallTarget::Private {
+            uid: "u_peer".to_owned(),
+            peer_uin: Some(42),
+            sequence: 101,
+            client_sequence: 102,
+            random: 103,
+            timestamp: 104,
+        },
+    )?;
+    let mut store = MessageStore::open(&directory, local_id)?;
+    store.put(&record)?;
+    drop(store);
+
+    let path = directory.join("messages-0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f.sqlite3");
+    let connection = Connection::open(&path)?;
+    connection.execute_batch(
+        "ALTER TABLE messages DROP COLUMN peer_uin;
+         PRAGMA user_version = 3;",
+    )?;
+    drop(connection);
+
+    let reopened = MessageStore::open(&directory, local_id)?;
+    let migrated = reopened.get(9)?.ok_or("migrated record missing")?;
+    assert_eq!(
+        migrated.recall(),
+        &RecallTarget::Private {
+            uid: "u_peer".to_owned(),
+            peer_uin: None,
+            sequence: 101,
+            client_sequence: 102,
+            random: 103,
+            timestamp: 104,
+        }
+    );
+    let connection = Connection::open(path)?;
+    assert_eq!(
+        connection.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))?,
+        4
     );
     Ok(())
 }

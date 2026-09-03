@@ -102,6 +102,7 @@ fn encode_target(target: &RecallTarget) -> Result<EncodedRecall, AccountActionEr
             client_sequence,
             random,
             timestamp,
+            ..
         } => encode_private_recall(PrivateRecallInput {
             target_uid: uid,
             sequence: *sequence,
@@ -146,6 +147,7 @@ mod tests {
 
         let private = encode_target(&RecallTarget::Private {
             uid: "u_peer".to_owned(),
+            peer_uin: Some(42),
             sequence: 34,
             client_sequence: 56,
             random: 78,

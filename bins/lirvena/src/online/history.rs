@@ -173,6 +173,7 @@ mod tests {
     fn friend_anchor_requires_the_retained_same_peer() {
         let target = RecallTarget::Private {
             uid: "u_peer".to_owned(),
+            peer_uin: Some(42),
             sequence: 100,
             client_sequence: 101,
             random: 102,

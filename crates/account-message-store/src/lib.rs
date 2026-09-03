@@ -12,7 +12,7 @@ mod quote;
 
 pub use quote::QuoteTarget;
 
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 const MAX_MESSAGES: usize = 4_096;
 const MAX_JSON_BYTES: usize = 64 * 1024;
 const MAX_UID_BYTES: usize = 128;
@@ -71,6 +71,11 @@ pub enum RecallTarget {
     Private {
         /// Current peer UID.
         uid: String,
+        /// Current peer numeric identifier when observed in this storage generation.
+        ///
+        /// Records migrated from schema v3 retain `None` and cannot be used by
+        /// operations that require a numeric peer correlation.
+        peer_uin: Option<u32>,
         /// QQ server sequence.
         sequence: u64,
         /// Original client sequence.
@@ -211,8 +216,8 @@ impl MessageStore {
             "INSERT OR REPLACE INTO messages (
                  message_id, inserted_at_ms, response_json, recall_kind, group_code, uid,
                  sequence, client_sequence, random, timestamp, quote_sequence, quote_message_uid,
-                 quote_sender_uin, quote_sender_uid, quote_timestamp, quote_elements
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                 quote_sender_uin, quote_sender_uid, quote_timestamp, quote_elements, peer_uin
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             params![
                 i64::from(record.message_id),
                 to_i64(record.inserted_at_ms)?,
@@ -230,6 +235,7 @@ impl MessageStore {
                 quote.map(QuoteTarget::sender_uid),
                 quote.map(|value| i64::from(value.timestamp())),
                 quote_elements,
+                fields.peer_uin.map(i64::from),
             ],
         )?;
         transaction.execute(
@@ -253,7 +259,8 @@ impl MessageStore {
             .query_row(
                 "SELECT inserted_at_ms, response_json, recall_kind, group_code, uid, sequence,
                         client_sequence, random, timestamp, quote_sequence, quote_message_uid,
-                        quote_sender_uin, quote_sender_uid, quote_timestamp, quote_elements
+                        quote_sender_uin, quote_sender_uid, quote_timestamp, quote_elements,
+                        peer_uin
                  FROM messages WHERE message_id = ?1",
                 [i64::from(message_id)],
                 |row| {
@@ -273,6 +280,7 @@ impl MessageStore {
                         quote_sender_uid: row.get(12)?,
                         quote_timestamp: row.get(13)?,
                         quote_elements: row.get(14)?,
+                        peer_uin: row.get(15)?,
                     })
                 },
             )
@@ -355,6 +363,7 @@ impl MessageStore {
     pub fn find_private(
         &self,
         uid: &str,
+        peer_uin: u32,
         sequence: u64,
         client_sequence: u64,
         random: u32,
@@ -362,6 +371,7 @@ impl MessageStore {
     ) -> Result<Option<MessageRecord>, MessageStoreError> {
         let target = RecallTarget::Private {
             uid: uid.to_owned(),
+            peer_uin: Some(peer_uin),
             sequence,
             client_sequence,
             random,
@@ -372,14 +382,15 @@ impl MessageStore {
         }
         let mut statement = self.connection.prepare(
             "SELECT message_id FROM messages
-             WHERE recall_kind = 2 AND uid = ?1 AND sequence = ?2 AND client_sequence = ?3
-               AND random = ?4 AND timestamp = ?5
+             WHERE recall_kind = 2 AND uid = ?1 AND peer_uin = ?2 AND sequence = ?3
+               AND client_sequence = ?4 AND random = ?5 AND timestamp = ?6
              ORDER BY inserted_at_ms DESC LIMIT 2",
         )?;
         let ids = statement
             .query_map(
                 params![
                     uid,
+                    i64::from(peer_uin),
                     sequence.to_be_bytes().to_vec(),
                     client_sequence.to_be_bytes().to_vec(),
                     i64::from(random),
@@ -436,6 +447,7 @@ struct RecallFields<'a> {
     kind: i64,
     group_code: Option<u32>,
     uid: Option<&'a str>,
+    peer_uin: Option<u32>,
     sequence: Option<u64>,
     client_sequence: Option<u64>,
     random: Option<u32>,
@@ -453,6 +465,7 @@ impl<'a> RecallFields<'a> {
                 kind: 1,
                 group_code: Some(*group_code),
                 uid: None,
+                peer_uin: None,
                 sequence: Some(*sequence),
                 client_sequence: None,
                 random: *random,
@@ -460,6 +473,7 @@ impl<'a> RecallFields<'a> {
             },
             RecallTarget::Private {
                 uid,
+                peer_uin,
                 sequence,
                 client_sequence,
                 random,
@@ -468,6 +482,7 @@ impl<'a> RecallFields<'a> {
                 kind: 2,
                 group_code: None,
                 uid: Some(uid),
+                peer_uin: *peer_uin,
                 sequence: Some(*sequence),
                 client_sequence: Some(*client_sequence),
                 random: Some(*random),
@@ -477,6 +492,7 @@ impl<'a> RecallFields<'a> {
                 kind: 0,
                 group_code: None,
                 uid: None,
+                peer_uin: None,
                 sequence: None,
                 client_sequence: None,
                 random: None,
@@ -492,6 +508,7 @@ struct StoredRow {
     kind: i64,
     group_code: Option<i64>,
     uid: Option<String>,
+    peer_uin: Option<i64>,
     sequence: Option<Vec<u8>>,
     client_sequence: Option<Vec<u8>>,
     random: Option<i64>,
@@ -521,6 +538,7 @@ impl StoredRow {
             }
             2 if self.group_code.is_none() => RecallTarget::Private {
                 uid: self.uid.ok_or(MessageStoreError::Configuration)?,
+                peer_uin: optional_u32(self.peer_uin)?,
                 sequence: decode_u64(self.sequence)?,
                 client_sequence: decode_u64(self.client_sequence)?,
                 random: from_i64(self.random)?,
@@ -576,6 +594,7 @@ impl StoredRow {
     fn no_fields(&self) -> bool {
         self.group_code.is_none()
             && self.uid.is_none()
+            && self.peer_uin.is_none()
             && self.sequence.is_none()
             && self.client_sequence.is_none()
             && self.random.is_none()
@@ -605,11 +624,12 @@ fn migrate(connection: &mut Connection) -> Result<(), MessageStoreError> {
                      quote_sender_uin INTEGER,
                      quote_sender_uid TEXT,
                      quote_timestamp INTEGER,
-                     quote_elements BLOB
+                     quote_elements BLOB,
+                     peer_uin INTEGER
                  );
                  CREATE INDEX messages_quote_correlation
                      ON messages(quote_message_uid, quote_sequence);
-                 PRAGMA user_version = 3;",
+                 PRAGMA user_version = 4;",
             )?;
             transaction.commit()?;
             Ok(())
@@ -626,9 +646,19 @@ fn migrate(connection: &mut Connection) -> Result<(), MessageStoreError> {
                  ALTER TABLE messages ADD COLUMN quote_sender_uid TEXT;
                  ALTER TABLE messages ADD COLUMN quote_timestamp INTEGER;
                  ALTER TABLE messages ADD COLUMN quote_elements BLOB;
+                 ALTER TABLE messages ADD COLUMN peer_uin INTEGER;
                  CREATE INDEX messages_quote_correlation
                      ON messages(quote_message_uid, quote_sequence);
-                 PRAGMA user_version = 3;",
+                 PRAGMA user_version = 4;",
+            )?;
+            transaction.commit()?;
+            Ok(())
+        }
+        3 => {
+            let transaction = connection.transaction()?;
+            transaction.execute_batch(
+                "ALTER TABLE messages ADD COLUMN peer_uin INTEGER;
+                 PRAGMA user_version = 4;",
             )?;
             transaction.commit()?;
             Ok(())
@@ -658,6 +688,7 @@ fn valid_recall(target: &RecallTarget) -> bool {
         } => *group_code != 0 && *sequence != 0 && random.is_none_or(|value| value != 0),
         RecallTarget::Private {
             uid,
+            peer_uin,
             sequence,
             client_sequence,
             random,
@@ -666,6 +697,7 @@ fn valid_recall(target: &RecallTarget) -> bool {
             !uid.is_empty()
                 && uid.len() <= MAX_UID_BYTES
                 && !uid.chars().any(char::is_control)
+                && peer_uin.is_none_or(|value| value != 0)
                 && *sequence != 0
                 && *client_sequence != 0
                 && *random != 0
