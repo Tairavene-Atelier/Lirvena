@@ -11,6 +11,7 @@ mod read_report;
 mod recall;
 mod recall_response;
 mod request;
+mod rich_content;
 mod rich_text;
 
 pub use decoder::{MessageDecoder, MessageDisposition};
@@ -30,6 +31,6 @@ pub use recall_response::{validate_group_recall_response, validate_private_recal
 pub use request::{GroupRequestSignal, decode_group_request_signal};
 pub use rich_text::{
     FaceKind, FaceSegment, ImageSegment, MediaFile, MediaScope, MentionSegment, MentionTarget,
-    OpaqueAttachment, RichTextElement, RichTextMessage, Segment, VideoSegment, VoiceSegment,
-    decode_rich_text,
+    OpaqueAttachment, PokeSegment, RichTextElement, RichTextMessage, Segment, VideoSegment,
+    VoiceSegment, XmlSegment, decode_rich_text,
 };

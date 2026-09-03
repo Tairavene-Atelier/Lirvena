@@ -1,11 +1,12 @@
 use prost::Message;
 
 use super::model::{
-    FaceKind, FaceSegment, MentionSegment, MentionTarget, RichTextElement, RichTextMessage, Segment,
+    FaceKind, FaceSegment, MentionSegment, MentionTarget, PokeSegment, RichTextElement,
+    RichTextMessage, Segment, XmlSegment,
 };
 use super::proto::{
-    AnimatedFaceWire, CommonWire, ElementWire, FaceWire, MentionWire, RichTextWire,
-    StandardFaceWire, TextWire,
+    AnimatedFaceWire, CommonWire, ElementWire, FaceWire, LightAppWire, MentionWire,
+    RichMessageWire, RichTextWire, StandardFaceWire, TextWire,
 };
 use crate::MessageDecodeError;
 
@@ -71,6 +72,16 @@ fn decode_element(encoded: Vec<u8>) -> Result<RichTextElement, MessageDecodeErro
             .as_deref()
             .map(super::media_legacy::decode_video)
             .transpose()?,
+        wire.rich_message
+            .as_deref()
+            .map(decode_rich_message)
+            .transpose()?
+            .flatten(),
+        wire.light_app
+            .as_deref()
+            .map(decode_light_app)
+            .transpose()?
+            .flatten(),
     ];
     let mut supported = projections.into_iter().flatten();
     let first = supported.next();
@@ -159,7 +170,31 @@ fn decode_common(input: &[u8]) -> Result<Option<Segment>, MessageDecodeError> {
     if wire.service_type == 48 {
         return super::media_decode::decode(wire.business_type, &body);
     }
+    if wire.service_type == 2 {
+        let (kind, strength) = crate::rich_content::decode_poke(&body)?;
+        return Ok(Some(Segment::Poke(PokeSegment::new(kind, strength))));
+    }
     Ok(None)
+}
+
+fn decode_rich_message(input: &[u8]) -> Result<Option<Segment>, MessageDecodeError> {
+    let wire = RichMessageWire::decode(input).map_err(|_error| MessageDecodeError)?;
+    match wire.service_id {
+        Some(1) => crate::rich_content::decompress(&wire.template)
+            .map(Segment::Json)
+            .map(Some),
+        Some(35) => crate::rich_content::decompress(&wire.template)
+            .map(|body| Segment::Xml(XmlSegment::new(body, 35)))
+            .map(Some),
+        _ => Ok(None),
+    }
+}
+
+fn decode_light_app(input: &[u8]) -> Result<Option<Segment>, MessageDecodeError> {
+    let wire = LightAppWire::decode(input).map_err(|_error| MessageDecodeError)?;
+    crate::rich_content::decompress(&wire.data)
+        .map(Segment::Json)
+        .map(Some)
 }
 
 fn valid_text(value: &str, maximum: usize) -> bool {

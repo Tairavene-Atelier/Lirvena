@@ -90,8 +90,64 @@ pub enum Segment {
     Video(super::VideoSegment),
     /// Incoming voice metadata.
     Voice(super::VoiceSegment),
+    /// Incoming JSON rich content.
+    Json(String),
+    /// Incoming XML rich content.
+    Xml(XmlSegment),
+    /// Incoming shake/poke content.
+    Poke(PokeSegment),
     /// A valid element without one unambiguous compiled projection yet.
     Unsupported,
+}
+
+/// Incoming XML rich content and its QQ service identifier.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct XmlSegment {
+    body: String,
+    service_id: i32,
+}
+
+impl XmlSegment {
+    pub(super) const fn new(body: String, service_id: i32) -> Self {
+        Self { body, service_id }
+    }
+
+    /// Returns the decoded XML body.
+    #[must_use]
+    pub fn body(&self) -> &str {
+        &self.body
+    }
+
+    /// Returns the QQ rich-message service identifier.
+    #[must_use]
+    pub const fn service_id(&self) -> i32 {
+        self.service_id
+    }
+}
+
+/// Incoming QQ shake/poke content.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PokeSegment {
+    kind: u32,
+    strength: u32,
+}
+
+impl PokeSegment {
+    pub(super) const fn new(kind: u32, strength: u32) -> Self {
+        Self { kind, strength }
+    }
+
+    /// Returns the poke kind.
+    #[must_use]
+    pub const fn kind(self) -> u32 {
+        self.kind
+    }
+
+    /// Returns the poke strength.
+    #[must_use]
+    pub const fn strength(self) -> u32 {
+        self.strength
+    }
 }
 
 /// Bounded mention display and target.

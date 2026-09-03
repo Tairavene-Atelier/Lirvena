@@ -8,8 +8,10 @@ use account_api::{
 use account_runtime::AccountLocalId;
 use adapter_onebot::{IdFormat, project_account_event, project_message_record};
 use prost::Message;
-use qq_message::{MemberDecreaseKind, MemberIncreaseKind};
-use qq_message::{MessageDecoder, MessageDisposition};
+use qq_message::{
+    MemberDecreaseKind, MemberIncreaseKind, MessageDecoder, MessageDisposition, OutboundSegment,
+    RichTextMessage, SendMessageInput, SendTextTarget, decode_rich_text, encode_message,
+};
 use serde_json::json;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -141,6 +143,18 @@ struct Body {
     content: Option<Vec<u8>>,
 }
 
+#[derive(Clone, PartialEq, Message)]
+struct OutboundMessageFixture {
+    #[prost(message, optional, tag = "3")]
+    body: Option<OutboundBodyFixture>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct OutboundBodyFixture {
+    #[prost(bytes = "vec", optional, tag = "1")]
+    rich_text: Option<Vec<u8>>,
+}
+
 #[test]
 fn group_message_includes_only_observed_sender_fields() -> TestResult {
     let event = event(82, Some((88, "member")), None)?;
@@ -184,6 +198,51 @@ fn private_message_uses_the_observed_friend_name() -> TestResult {
     assert_eq!(
         projected["sender"],
         json!({"user_id": 42, "nickname": "friend"})
+    );
+    Ok(())
+}
+
+#[test]
+fn rich_segments_project_to_standard_onebot_shapes() -> TestResult {
+    let encoded = encode_message(&SendMessageInput {
+        target: SendTextTarget::Group { group_code: 88 },
+        segments: &[
+            OutboundSegment::Json("{\"app\":\"demo\"}"),
+            OutboundSegment::Xml {
+                body: "<msg/>",
+                service_id: 35,
+            },
+            OutboundSegment::Poke {
+                kind: 2,
+                strength: 7,
+            },
+        ],
+        client_sequence: 7,
+        random: 8,
+        unix_seconds: 9,
+    })?;
+    let rich = OutboundMessageFixture::decode(encoded.as_slice())?
+        .body
+        .and_then(|body| body.rich_text)
+        .ok_or("missing rich text")?;
+    let event = event_with_rich(
+        82,
+        Some((88, "member")),
+        None,
+        Some(decode_rich_text(&rich)?),
+    )?;
+    let projected = project_account_event(&event, IdFormat::String)?.ok_or("missing event")?;
+    assert_eq!(
+        projected["message"],
+        json!([
+            {"type": "json", "data": {"data": "{\"app\":\"demo\"}"}},
+            {"type": "xml", "data": {"data": "<msg/>", "service_id": 35}},
+            {"type": "poke", "data": {"type": 2, "strength": 7, "id": -1}}
+        ])
+    );
+    assert_eq!(
+        projected["raw_message"],
+        "[CQ:json][CQ:xml][CQ:poke,type=2,strength=7]"
     );
     Ok(())
 }
@@ -240,6 +299,15 @@ fn event(
     group: Option<(u32, &str)>,
     friend_name: Option<&str>,
 ) -> Result<AccountEvent, Box<dyn std::error::Error>> {
+    event_with_rich(message_type, group, friend_name, None)
+}
+
+fn event_with_rich(
+    message_type: u32,
+    group: Option<(u32, &str)>,
+    friend_name: Option<&str>,
+    rich_text: Option<RichTextMessage>,
+) -> Result<AccountEvent, Box<dyn std::error::Error>> {
     let group = group.map(|(group_uin, member_name)| Route {
         group_uin,
         member_name: member_name.to_owned(),
@@ -270,7 +338,7 @@ fn event(
     };
     let identity = identity()?;
     Ok(AccountEvent::Message(Box::new(InboundMessage::new(
-        identity, 9, *envelope, None,
+        identity, 9, *envelope, rich_text,
     ))))
 }
 

@@ -2,8 +2,6 @@ use prost::Message;
 
 use crate::MessageDecodeError;
 
-mod rich;
-
 const MAX_TEXT_BYTES: usize = 4_500;
 const MAX_ELEMENTS: usize = 256;
 const MAX_DISPLAY_BYTES: usize = 1_024;
@@ -267,14 +265,14 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
             }
             OutboundSegment::Json(body) => Ok(vec![Element {
                 light_app: Some(LightApp {
-                    data: rich::compressed_payload(body)?,
+                    data: crate::rich_content::compress(body)?,
                     resource_id: None,
                 }),
                 ..Element::default()
             }]),
             OutboundSegment::Xml { body, service_id } if *service_id > 0 => Ok(vec![Element {
                 rich_message: Some(RichMessage {
-                    template: rich::compressed_payload(body)?,
+                    template: crate::rich_content::compress(body)?,
                     service_id: Some(*service_id),
                 }),
                 ..Element::default()
@@ -282,7 +280,7 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
             OutboundSegment::Poke { kind, strength } if *kind != 0 => Ok(vec![common_element(
                 2,
                 *kind,
-                rich::poke_payload(*kind, *strength),
+                crate::rich_content::encode_poke(*kind, *strength),
             )]),
             OutboundSegment::Text(_)
             | OutboundSegment::MentionEveryone { .. }
