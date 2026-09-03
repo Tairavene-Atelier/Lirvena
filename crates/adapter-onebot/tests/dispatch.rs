@@ -16,7 +16,9 @@ impl OneBotBackend for EchoBackend {
             if request.action() == "extension.anything" {
                 Ok(json!({"routed": request.action()}))
             } else if request.action() == "get_friend_list" {
-                Ok(json!([{"user_id": 42, "nested": {"group_id": "7"}, "file_id": "9"}]))
+                Ok(
+                    json!([{"user_id": 42, "nested": {"group_id": "7", "invitor_id": 8}, "file_id": "9"}]),
+                )
             } else {
                 Err(BackendError::ActionNotFound)
             }
@@ -33,6 +35,7 @@ async fn configured_id_format_projects_nested_standard_identifiers() -> Result<(
         serde_json::to_value(response).map_err(|error| BackendError::Failed(error.to_string()))?;
     assert_eq!(encoded["data"][0]["user_id"], json!("42"));
     assert_eq!(encoded["data"][0]["nested"]["group_id"], json!("7"));
+    assert_eq!(encoded["data"][0]["nested"]["invitor_id"], json!("8"));
     assert_eq!(encoded["data"][0]["file_id"], json!("9"));
     Ok(())
 }

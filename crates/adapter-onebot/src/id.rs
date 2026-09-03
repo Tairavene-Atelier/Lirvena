@@ -55,6 +55,12 @@ impl IdFormat {
 fn is_identifier_key(value: &str) -> bool {
     matches!(
         value,
-        "self_id" | "user_id" | "group_id" | "operator_id" | "message_id" | "real_id"
+        "self_id"
+            | "user_id"
+            | "group_id"
+            | "operator_id"
+            | "invitor_id"
+            | "message_id"
+            | "real_id"
     )
 }
