@@ -347,6 +347,56 @@ impl MessageStore {
         }
     }
 
+    /// Finds the unique retained local message for one complete direct-message correlation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for invalid fields, persistence failure, or ambiguous retained rows.
+    pub fn find_private(
+        &self,
+        uid: &str,
+        sequence: u64,
+        client_sequence: u64,
+        random: u32,
+        timestamp: u32,
+    ) -> Result<Option<MessageRecord>, MessageStoreError> {
+        let target = RecallTarget::Private {
+            uid: uid.to_owned(),
+            sequence,
+            client_sequence,
+            random,
+            timestamp,
+        };
+        if !valid_recall(&target) {
+            return Err(MessageStoreError::Configuration);
+        }
+        let mut statement = self.connection.prepare(
+            "SELECT message_id FROM messages
+             WHERE recall_kind = 2 AND uid = ?1 AND sequence = ?2 AND client_sequence = ?3
+               AND random = ?4 AND timestamp = ?5
+             ORDER BY inserted_at_ms DESC LIMIT 2",
+        )?;
+        let ids = statement
+            .query_map(
+                params![
+                    uid,
+                    sequence.to_be_bytes().to_vec(),
+                    client_sequence.to_be_bytes().to_vec(),
+                    i64::from(random),
+                    i64::from(timestamp),
+                ],
+                |row| row.get::<_, i64>(0),
+            )?
+            .collect::<Result<Vec<_>, _>>()?;
+        match ids.as_slice() {
+            [] => Ok(None),
+            [id] => {
+                self.get(u32::try_from(*id).map_err(|_error| MessageStoreError::Configuration)?)
+            }
+            _ => Err(MessageStoreError::Configuration),
+        }
+    }
+
     /// Removes one retained message after QQ accepts its recall.
     ///
     /// # Errors

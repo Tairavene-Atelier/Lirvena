@@ -21,8 +21,8 @@ pub use decoder::{MessageDecoder, MessageDisposition};
 pub use error::MessageDecodeError;
 pub use friend_request::{FriendRequestSignal, decode_friend_request_signal};
 pub use history::{
-    GROUP_HISTORY_ROUTE, HistoricalMessage, decode_group_history_response,
-    encode_group_history_request,
+    FRIEND_HISTORY_ROUTE, GROUP_HISTORY_ROUTE, HistoricalMessage, decode_friend_history_response,
+    decode_group_history_response, encode_friend_history_request, encode_group_history_request,
 };
 pub use long_message::{
     LongMessageTarget, encode_long_message_receive, encode_long_message_send,

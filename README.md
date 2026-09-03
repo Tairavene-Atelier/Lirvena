@@ -40,6 +40,8 @@ Lagrange 兼容的 `send_poke`、`group_poke` 与 `friend_poke` 使用独立 QQ 
 身份都能唯一解析时，才发出 Lagrange 兼容的 `group_msg_emoji_like` 通知。
 `get_group_msg_history` 使用本地消息关联确定同群结束 sequence，再向 QQ 获取最多 100 条真实
 历史消息；返回相关字段、内嵌消息或本地关联有矛盾时整体失败，不用本地缓存冒充 QQ 历史。
+`get_friend_msg_history` 同样要求仍保留的同联系人消息锚点，再向 QQ 获取最多 100 条真实漫游
+消息；收发两个方向共享同一联系人关联，改变联系人、未来时间消息或重复关联都会失败关闭。
 具有完整群消息关联的新记录还支持标准 `set_essence_msg` 与 `delete_essence_msg`；从旧存储
 代际迁移且缺少 random 的记录不会伪造精华操作。
 目录查询已覆盖好友、群、群成员和标准 `get_stranger_info`；公开资料响应会校验请求 QQ 号，
