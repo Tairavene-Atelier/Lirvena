@@ -6,7 +6,7 @@ use account_message_store::{
 };
 use account_runtime::AccountLocalId;
 use adapter_onebot::{IdFormat, project_message_record};
-use qq_message::{MessageClass, MessageEnvelope, SendTextTarget};
+use qq_message::{MessageClass, MessageEnvelope, MessageRoute, SendTextTarget};
 use serde_json::Value;
 
 pub(super) struct MessageRegistry {
@@ -23,8 +23,9 @@ impl MessageRegistry {
         })
     }
 
-    pub(super) fn prepare_inbound(
+    fn prepare_inbound(
         &self,
+        identity: &AccountIdentity,
         envelope: &MessageEnvelope,
     ) -> Result<(u32, RecallTarget), MessageStoreError> {
         let target = match envelope.class() {
@@ -39,7 +40,7 @@ impl MessageRegistry {
                         random: wire_u32(envelope.random()).filter(|value| *value != 0),
                     }
                 }),
-            MessageClass::Private => private_inbound(envelope),
+            MessageClass::Private => private_inbound(envelope, identity.qq_id()),
             _ => RecallTarget::Unavailable,
         };
         let message_id = match &target {
@@ -51,9 +52,20 @@ impl MessageRegistry {
                 || self.next_id(preferred_id(envelope.sequence())),
                 |record| Ok(record.message_id()),
             )?,
-            RecallTarget::Private { .. } | RecallTarget::Unavailable => {
-                self.next_id(preferred_id(envelope.sequence()))?
-            }
+            RecallTarget::Private {
+                uid,
+                sequence,
+                client_sequence,
+                random,
+                timestamp,
+            } => self
+                .store
+                .find_private(uid, *sequence, *client_sequence, *random, *timestamp)?
+                .map_or_else(
+                    || self.next_id(preferred_id(envelope.sequence())),
+                    |record| Ok(record.message_id()),
+                )?,
+            RecallTarget::Unavailable => self.next_id(preferred_id(envelope.sequence()))?,
         };
         Ok((message_id, target))
     }
@@ -65,7 +77,7 @@ impl MessageRegistry {
         rich_text: Option<qq_message::RichTextMessage>,
         inserted_at_ms: u64,
     ) -> Result<InboundMessage, MessageStoreError> {
-        let (message_id, recall) = self.prepare_inbound(&envelope)?;
+        let (message_id, recall) = self.prepare_inbound(identity, &envelope)?;
         let reply_ids = self.resolve_reply_ids(&envelope, rich_text.as_ref())?;
         let message = InboundMessage::new(identity.clone(), message_id, envelope, rich_text)
             .with_reply_ids(reply_ids)
@@ -202,8 +214,10 @@ pub(super) struct OutboundCorrelations {
     pub(super) timestamp: u32,
 }
 
-fn private_inbound(envelope: &MessageEnvelope) -> RecallTarget {
-    let Some(uid) = envelope.route().from_uid.clone() else {
+fn private_inbound(envelope: &MessageEnvelope, self_uin: u64) -> RecallTarget {
+    let route = envelope.route();
+    let uid = private_peer_uid(route, self_uin);
+    let Some(uid) = uid else {
         return RecallTarget::Unavailable;
     };
     let Some(random) = wire_u32(envelope.random()) else {
@@ -221,6 +235,16 @@ fn private_inbound(envelope: &MessageEnvelope) -> RecallTarget {
         client_sequence: u64::from(envelope.direct_message_sequence()),
         random,
         timestamp,
+    }
+}
+
+fn private_peer_uid(route: &MessageRoute, self_uin: u64) -> Option<String> {
+    if u64::from(route.from_uin) == self_uin {
+        route.to_uid.clone()
+    } else if u64::from(route.to_uin) == self_uin {
+        route.from_uid.clone()
+    } else {
+        None
     }
 }
 
@@ -284,10 +308,38 @@ fn preferred_id(sequence: u64) -> u32 {
 mod tests {
     use account_message_store::RecallTarget;
     use account_runtime::AccountLocalId;
-    use qq_message::SendTextTarget;
+    use qq_message::{MessageRoute, SendTextTarget};
     use serde_json::json;
 
-    use super::{MessageRegistry, OutboundCorrelations};
+    use super::{MessageRegistry, OutboundCorrelations, private_peer_uid};
+
+    #[test]
+    fn private_peer_is_selected_for_both_directions() {
+        let inbound = MessageRoute {
+            from_uin: 42,
+            from_uid: Some("u_peer".to_owned()),
+            to_uin: 10_001,
+            to_uid: Some("u_self".to_owned()),
+            ..MessageRoute::default()
+        };
+        assert_eq!(
+            private_peer_uid(&inbound, 10_001).as_deref(),
+            Some("u_peer")
+        );
+
+        let outbound = MessageRoute {
+            from_uin: 10_001,
+            from_uid: Some("u_self".to_owned()),
+            to_uin: 42,
+            to_uid: Some("u_peer".to_owned()),
+            ..MessageRoute::default()
+        };
+        assert_eq!(
+            private_peer_uid(&outbound, 10_001).as_deref(),
+            Some("u_peer")
+        );
+        assert_eq!(private_peer_uid(&outbound, 99), None);
+    }
 
     #[test]
     fn outbound_record_survives_runtime_restart() -> Result<(), Box<dyn std::error::Error>> {

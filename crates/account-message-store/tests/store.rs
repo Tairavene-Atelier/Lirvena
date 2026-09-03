@@ -158,6 +158,37 @@ fn group_sequence_lookup_rejects_ambiguous_correlations() -> TestResult {
 }
 
 #[test]
+fn private_lookup_requires_one_complete_unique_correlation() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let directory = root.path().join("private");
+    let mut store = MessageStore::open(&directory, AccountLocalId::from_bytes([14; 16]))?;
+    let target = RecallTarget::Private {
+        uid: "u_peer".to_owned(),
+        sequence: 101,
+        client_sequence: 102,
+        random: 103,
+        timestamp: 104,
+    };
+    let first = MessageRecord::new(1, 10, json!({"message_id": 1}), target.clone())?;
+    store.put(&first)?;
+    assert_eq!(
+        store.find_private("u_peer", 101, 102, 103, 104)?,
+        Some(first)
+    );
+    assert_eq!(store.find_private("u_peer", 101, 102, 103, 105)?, None);
+
+    store.put(&MessageRecord::new(
+        2,
+        11,
+        json!({"message_id": 2}),
+        target,
+    )?)?;
+    assert!(store.find_private("u_peer", 101, 102, 103, 104).is_err());
+    assert!(store.find_private("", 101, 102, 103, 104).is_err());
+    Ok(())
+}
+
+#[test]
 fn schema_one_group_records_migrate_without_inventing_random() -> TestResult {
     let root = tempfile::tempdir()?;
     let directory = root.path().join("private");

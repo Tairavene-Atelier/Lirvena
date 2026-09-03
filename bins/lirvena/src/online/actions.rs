@@ -100,6 +100,18 @@ pub(super) async fn execute_account_action(
             )
             .await
         }
+        "get_friend_msg_history" => {
+            super::history::friend(
+                request,
+                identity,
+                packets,
+                pushes,
+                friends,
+                resources.messages,
+                context,
+            )
+            .await
+        }
         "send_group_forward_msg" => {
             super::long_message::send_group_forward_message(
                 request, identity, packets, pushes, resources, context,
