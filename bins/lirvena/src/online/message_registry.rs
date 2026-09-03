@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use account_api::InboundMessage;
+use account_api::{AccountIdentity, InboundMessage};
 use account_message_store::{
     MessageRecord, MessageStore, MessageStoreError, QuoteTarget, RecallTarget,
 };
@@ -42,7 +42,36 @@ impl MessageRegistry {
             MessageClass::Private => private_inbound(envelope),
             _ => RecallTarget::Unavailable,
         };
-        Ok((self.next_id(preferred_id(envelope.sequence()))?, target))
+        let message_id = match &target {
+            RecallTarget::Group {
+                group_code,
+                sequence,
+                ..
+            } => self.store.find_group(*group_code, *sequence)?.map_or_else(
+                || self.next_id(preferred_id(envelope.sequence())),
+                |record| Ok(record.message_id()),
+            )?,
+            RecallTarget::Private { .. } | RecallTarget::Unavailable => {
+                self.next_id(preferred_id(envelope.sequence()))?
+            }
+        };
+        Ok((message_id, target))
+    }
+
+    pub(super) fn retain_decoded(
+        &mut self,
+        identity: &AccountIdentity,
+        envelope: MessageEnvelope,
+        rich_text: Option<qq_message::RichTextMessage>,
+        inserted_at_ms: u64,
+    ) -> Result<InboundMessage, MessageStoreError> {
+        let (message_id, recall) = self.prepare_inbound(&envelope)?;
+        let reply_ids = self.resolve_reply_ids(&envelope, rich_text.as_ref())?;
+        let message = InboundMessage::new(identity.clone(), message_id, envelope, rich_text)
+            .with_reply_ids(reply_ids)
+            .map_err(|_error| MessageStoreError::Configuration)?;
+        self.retain_inbound(&message, recall, inserted_at_ms)?;
+        Ok(message)
     }
 
     pub(super) fn retain_inbound(

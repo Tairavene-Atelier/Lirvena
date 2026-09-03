@@ -16,7 +16,8 @@ pub use action::{ActionMode, ActionRequest};
 pub use backend::{AccountChannelBackend, BackendCall, BackendError, OneBotBackend};
 pub use dispatch::{DispatcherConfig, OneBotDispatcher};
 pub use event::{
-    EventProjectionError, project_account_event, project_forward_node, project_message_record,
+    EventProjectionError, project_account_event, project_forward_node, project_history_message,
+    project_message_record,
 };
 pub use forward::{ForwardNode, parse_forward_nodes};
 pub use id::IdFormat;
