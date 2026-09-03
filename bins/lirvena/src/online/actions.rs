@@ -165,6 +165,7 @@ pub(super) async fn execute_account_action(
         | "group_poke"
         | "friend_poke"
         | "send_like"
+        | "delete_friend"
         | "set_group_kick"
         | "set_group_ban"
         | "set_group_whole_ban"

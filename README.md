@@ -48,6 +48,8 @@ Lagrange 兼容的 `send_poke`、`group_poke` 与 `friend_poke` 使用独立 QQ 
 代际迁移且缺少 random 的记录不会伪造精华操作。
 目录查询已覆盖好友、群、群成员和标准 `get_stranger_info`；公开资料响应会校验请求 QQ 号，
 且只投影有界、有效的公开字段。
+`delete_friend` 会先从真实好友目录把数字 QQ 号解析为当前 UID，只有 QQ 明确接受删除/拉黑
+请求后才清除本地好友缓存；不存在或已变化的联系人不会报告成功。
 完整 OneBot 和生产部署尚未完成，因此当前版本仍不能声称已经登录或稳定在线。
 
 账号授权模式固定为 `public`、`require_grant` 和 `allow_public_fallback`。缺少授权时，
