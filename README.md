@@ -52,6 +52,8 @@ Lagrange 兼容的 `send_poke`、`group_poke` 与 `friend_poke` 使用独立 QQ 
 请求后才清除本地好友缓存；不存在或已变化的联系人不会报告成功。
 `set_qq_avatar` 与 `set_group_portrait` 复用统一的本地文件、URL、base64 和缓存媒体解析，
 并通过冻结 52194 Highway 命令上传；无效图像或 QQ 未完整确认上传时不会返回伪成功。
+群文件删除、移动和文件夹创建、删除、重命名使用冻结 QQ 请求，并同时校验 OIDB 外层结果与
+操作内层结果；参数或任一层响应不完整时都失败关闭。
 完整 OneBot 和生产部署尚未完成，因此当前版本仍不能声称已经登录或稳定在线。
 
 账号授权模式固定为 `public`、`require_grant` 和 `allow_public_fallback`。缺少授权时，

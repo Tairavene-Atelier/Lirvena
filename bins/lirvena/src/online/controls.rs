@@ -195,6 +195,16 @@ pub(super) async fn send_control(
     pushes: &PushRuntime,
     context: &mut OnlineContext<'_>,
 ) -> Result<(), AccountActionError> {
+    let response = send_control_response(request, packets, pushes, context).await?;
+    parse_control_response(&response).map_err(|_error| AccountActionError::QqFailure)
+}
+
+pub(super) async fn send_control_response(
+    request: &ControlRequest,
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    context: &mut OnlineContext<'_>,
+) -> Result<Vec<u8>, AccountActionError> {
     let reserve = match request.signing_operation() {
         Some(operation) => request_reserve(
             context.ceylith,
@@ -206,7 +216,7 @@ pub(super) async fn send_control(
         .map_err(|_error| AccountActionError::QqFailure)?,
         None => Vec::new(),
     };
-    let response = packets
+    packets
         .send_with_reserve(
             PacketContext::for_account(context, pushes.plan()),
             request.command(),
@@ -214,8 +224,7 @@ pub(super) async fn send_control(
             request.body(),
         )
         .await
-        .map_err(|_error| AccountActionError::QqFailure)?;
-    parse_control_response(&response).map_err(|_error| AccountActionError::QqFailure)
+        .map_err(|_error| AccountActionError::QqFailure)
 }
 
 #[cfg(test)]

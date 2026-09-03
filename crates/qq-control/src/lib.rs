@@ -7,6 +7,7 @@ use qq_wire::{decode_oidb_response, encode_oidb_request};
 mod delete_friend;
 mod essence;
 mod friend_request;
+mod group_file;
 mod group_request;
 mod poke;
 mod reaction;
@@ -14,6 +15,10 @@ mod reaction;
 pub use delete_friend::delete_friend;
 pub use essence::{delete_group_essence, set_group_essence};
 pub use friend_request::friend_request;
+pub use group_file::{
+    GroupFileControl, create_group_file_folder, delete_group_file, delete_group_file_folder,
+    move_group_file, rename_group_file_folder,
+};
 pub use group_request::group_request;
 pub use poke::poke;
 pub use reaction::{EmojiChainTarget, group_reaction, join_emoji_chain};

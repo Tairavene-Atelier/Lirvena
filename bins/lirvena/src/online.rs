@@ -3,6 +3,7 @@ mod avatar;
 mod controls;
 mod directory;
 mod essence;
+mod group_files;
 mod history;
 mod long_message;
 mod media;
