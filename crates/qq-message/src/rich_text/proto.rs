@@ -22,10 +22,30 @@ pub(super) struct ElementWire {
     pub direct_image: Option<Vec<u8>>,
     #[prost(bytes = "vec", optional, tag = "8")]
     pub group_image: Option<Vec<u8>>,
+    #[prost(bytes = "vec", optional, tag = "12")]
+    pub rich_message: Option<Vec<u8>>,
     #[prost(bytes = "vec", optional, tag = "19")]
     pub video: Option<Vec<u8>>,
+    #[prost(bytes = "vec", optional, tag = "51")]
+    pub light_app: Option<Vec<u8>>,
     #[prost(bytes = "vec", optional, tag = "53")]
     pub common: Option<Vec<u8>>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub(super) struct RichMessageWire {
+    #[prost(bytes = "vec", tag = "1")]
+    pub template: Vec<u8>,
+    #[prost(int32, optional, tag = "2")]
+    pub service_id: Option<i32>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub(super) struct LightAppWire {
+    #[prost(bytes = "vec", tag = "1")]
+    pub data: Vec<u8>,
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub resource_id: Option<Vec<u8>>,
 }
 
 #[derive(Clone, PartialEq, Message)]

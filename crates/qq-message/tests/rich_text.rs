@@ -1,5 +1,9 @@
 //! Conservative rich-text projection contracts.
 
+use std::io::Write as _;
+
+use flate2::Compression;
+use flate2::write::ZlibEncoder;
 use prost::Message;
 use qq_message::{FaceKind, MentionTarget, OpaqueAttachment, Segment, decode_rich_text};
 
@@ -23,8 +27,26 @@ struct ElementFixture {
     text: Option<Vec<u8>>,
     #[prost(bytes = "vec", optional, tag = "2")]
     face: Option<Vec<u8>>,
+    #[prost(bytes = "vec", optional, tag = "12")]
+    rich_message: Option<Vec<u8>>,
+    #[prost(bytes = "vec", optional, tag = "51")]
+    light_app: Option<Vec<u8>>,
     #[prost(bytes = "vec", optional, tag = "53")]
     common: Option<Vec<u8>>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct RichMessageFixture {
+    #[prost(bytes = "vec", tag = "1")]
+    template: Vec<u8>,
+    #[prost(int32, optional, tag = "2")]
+    service_id: Option<i32>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct LightAppFixture {
+    #[prost(bytes = "vec", tag = "1")]
+    data: Vec<u8>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -59,6 +81,16 @@ struct CommonFixture {
     service: i32,
     #[prost(bytes = "vec", optional, tag = "2")]
     body: Option<Vec<u8>>,
+    #[prost(uint32, tag = "3")]
+    business_type: u32,
+}
+
+#[derive(Clone, Copy, PartialEq, Message)]
+struct PokeFixture {
+    #[prost(uint32, tag = "1")]
+    kind: u32,
+    #[prost(uint32, tag = "7")]
+    strength: u32,
 }
 
 #[derive(Clone, Copy, PartialEq, Message)]
@@ -139,6 +171,42 @@ fn legacy_standard_and_common_faces_are_projected() -> TestResult {
         };
         assert_eq!((face.id(), face.kind()), (id, kind));
     }
+    Ok(())
+}
+
+#[test]
+fn json_xml_and_poke_are_projected_from_both_rich_generations() -> TestResult {
+    let input = rich([
+        light_app("{\"app\":\"modern\"}")?,
+        rich_message(1, "{\"app\":\"classic\"}")?,
+        rich_message(35, "<msg/>")?,
+        common_with_business(
+            2,
+            2,
+            PokeFixture {
+                kind: 2,
+                strength: 7,
+            }
+            .encode_to_vec(),
+        ),
+    ]);
+    let decoded = decode_rich_text(&input)?;
+    assert_eq!(
+        decoded.elements()[0].segment(),
+        &Segment::Json("{\"app\":\"modern\"}".to_owned())
+    );
+    assert_eq!(
+        decoded.elements()[1].segment(),
+        &Segment::Json("{\"app\":\"classic\"}".to_owned())
+    );
+    let Segment::Xml(xml) = decoded.elements()[2].segment() else {
+        return Err("expected XML".into());
+    };
+    assert_eq!((xml.body(), xml.service_id()), ("<msg/>", 35));
+    let Segment::Poke(poke) = decoded.elements()[3].segment() else {
+        return Err("expected poke".into());
+    };
+    assert_eq!((poke.kind(), poke.strength()), (2, 7));
     Ok(())
 }
 
@@ -238,6 +306,7 @@ fn common(service: i32, body: Vec<u8>) -> Vec<u8> {
             CommonFixture {
                 service,
                 body: Some(body),
+                business_type: 0,
             }
             .encode_to_vec(),
         ),
@@ -245,5 +314,71 @@ fn common(service: i32, body: Vec<u8>) -> Vec<u8> {
 }
 
 fn element(text: Option<Vec<u8>>, face: Option<Vec<u8>>, common: Option<Vec<u8>>) -> Vec<u8> {
-    ElementFixture { text, face, common }.encode_to_vec()
+    ElementFixture {
+        text,
+        face,
+        rich_message: None,
+        light_app: None,
+        common,
+    }
+    .encode_to_vec()
+}
+
+fn common_with_business(service: i32, business_type: u32, body: Vec<u8>) -> Vec<u8> {
+    ElementFixture {
+        text: None,
+        face: None,
+        rich_message: None,
+        light_app: None,
+        common: Some(
+            CommonFixture {
+                service,
+                body: Some(body),
+                business_type,
+            }
+            .encode_to_vec(),
+        ),
+    }
+    .encode_to_vec()
+}
+
+fn rich_message(service_id: i32, body: &str) -> Result<Vec<u8>, std::io::Error> {
+    Ok(ElementFixture {
+        text: None,
+        face: None,
+        rich_message: Some(
+            RichMessageFixture {
+                template: compressed(body)?,
+                service_id: Some(service_id),
+            }
+            .encode_to_vec(),
+        ),
+        light_app: None,
+        common: None,
+    }
+    .encode_to_vec())
+}
+
+fn light_app(body: &str) -> Result<Vec<u8>, std::io::Error> {
+    Ok(ElementFixture {
+        text: None,
+        face: None,
+        rich_message: None,
+        light_app: Some(
+            LightAppFixture {
+                data: compressed(body)?,
+            }
+            .encode_to_vec(),
+        ),
+        common: None,
+    }
+    .encode_to_vec())
+}
+
+fn compressed(body: &str) -> Result<Vec<u8>, std::io::Error> {
+    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::best());
+    encoder.write_all(body.as_bytes())?;
+    let mut framed = vec![1];
+    framed.extend(encoder.finish()?);
+    Ok(framed)
 }

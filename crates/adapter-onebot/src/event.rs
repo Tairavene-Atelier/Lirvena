@@ -258,6 +258,15 @@ fn segment_json(element: &qq_message::RichTextElement) -> Value {
         Segment::Image(image) => media_segment("image", image.file()),
         Segment::Video(video) => media_segment("video", video.file()),
         Segment::Voice(voice) => media_segment("record", voice.file()),
+        Segment::Json(body) => json!({"type": "json", "data": {"data": body}}),
+        Segment::Xml(xml) => json!({
+            "type": "xml",
+            "data": {"data": xml.body(), "service_id": xml.service_id()}
+        }),
+        Segment::Poke(poke) => json!({
+            "type": "poke",
+            "data": {"type": poke.kind(), "strength": poke.strength(), "id": -1}
+        }),
         Segment::Unsupported => json!({
             "type": "lirvena_unsupported",
             "data": {"encoded_size": element.encoded().len()}
@@ -283,6 +292,13 @@ fn raw_segment(element: &qq_message::RichTextElement) -> String {
         Segment::Image(_) => "[CQ:image]".to_owned(),
         Segment::Video(_) => "[CQ:video]".to_owned(),
         Segment::Voice(_) => "[CQ:record]".to_owned(),
+        Segment::Json(_) => "[CQ:json]".to_owned(),
+        Segment::Xml(_) => "[CQ:xml]".to_owned(),
+        Segment::Poke(poke) => format!(
+            "[CQ:poke,type={},strength={}]",
+            poke.kind(),
+            poke.strength()
+        ),
         Segment::Unsupported => "[CQ:lirvena_unsupported]".to_owned(),
     }
 }
