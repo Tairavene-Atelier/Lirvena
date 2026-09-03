@@ -1,4 +1,5 @@
 mod actions;
+mod avatar;
 mod controls;
 mod directory;
 mod essence;

@@ -50,6 +50,8 @@ Lagrange 兼容的 `send_poke`、`group_poke` 与 `friend_poke` 使用独立 QQ 
 且只投影有界、有效的公开字段。
 `delete_friend` 会先从真实好友目录把数字 QQ 号解析为当前 UID，只有 QQ 明确接受删除/拉黑
 请求后才清除本地好友缓存；不存在或已变化的联系人不会报告成功。
+`set_qq_avatar` 与 `set_group_portrait` 复用统一的本地文件、URL、base64 和缓存媒体解析，
+并通过冻结 52194 Highway 命令上传；无效图像或 QQ 未完整确认上传时不会返回伪成功。
 完整 OneBot 和生产部署尚未完成，因此当前版本仍不能声称已经登录或稳定在线。
 
 账号授权模式固定为 `public`、`require_grant` 和 `allow_public_fallback`。缺少授权时，
