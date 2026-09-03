@@ -4,8 +4,8 @@ use std::time::{Duration, Instant};
 use account_api::AccountActionError;
 use qq_highway::{HighwayClient, HighwaySession, UploadIdentity};
 use qq_media::{
-    MediaPolicy, MediaReference, MediaResolver, MediaTarget, RemoteMediaPolicy,
-    RichMediaUploadPlan, analyze_image, analyze_video, default_video_thumbnail,
+    AvatarTarget, MediaPolicy, MediaReference, MediaResolver, MediaTarget, RemoteMediaPolicy,
+    RichMediaUploadPlan, analyze_image, analyze_video, avatar_upload, default_video_thumbnail,
     encode_image_metadata_request, encode_record_metadata_request, encode_video_metadata_request,
     parse_image_metadata_response, parse_record_metadata_response, parse_video_metadata_response,
     prepare_record,
@@ -100,6 +100,34 @@ impl MediaRuntime {
             message_info,
             compatibility,
         })
+    }
+
+    pub(super) async fn upload_avatar(
+        &mut self,
+        reference: &str,
+        target: AvatarTarget,
+        packets: &PacketRuntime,
+        pushes: &PushRuntime,
+        context: &mut OnlineContext<'_>,
+    ) -> Result<(), AccountActionError> {
+        let reference =
+            MediaReference::parse(reference).map_err(|_error| AccountActionError::BadParameters)?;
+        let object = self
+            .resolver
+            .resolve(&reference)
+            .await
+            .map_err(|_error| AccountActionError::QqFailure)?;
+        analyze_image(object.bytes()).map_err(|_error| AccountActionError::BadParameters)?;
+        let upload = avatar_upload(target).map_err(|_error| AccountActionError::BadParameters)?;
+        self.upload_bytes(
+            upload.command_id(),
+            upload.extension(),
+            object.bytes(),
+            packets,
+            pushes,
+            context,
+        )
+        .await
     }
 
     pub(super) async fn upload_record(
@@ -214,31 +242,52 @@ impl MediaRuntime {
             let extension = upload
                 .extension_for(bytes)
                 .map_err(|_error| AccountActionError::QqFailure)?;
-            self.ensure_session(packets, pushes, context).await?;
-            let session = self
-                .session
-                .as_ref()
-                .map(|(_, session)| session)
-                .ok_or(AccountActionError::QqFailure)?;
-            self.highway
-                .upload(
-                    session,
-                    &UploadIdentity {
-                        uin: context.uin,
-                        app_id: context.profile.app_id(),
-                        sub_app_id: context.profile.sub_app_id(),
-                        login_signature: context.credential.secrets().tgt(),
-                    },
-                    upload.command_id(),
-                    &extension,
-                    bytes,
-                )
-                .await
-                .map_err(|_error| {
-                    self.session = None;
-                    AccountActionError::QqFailure
-                })?;
+            self.upload_bytes(
+                upload.command_id(),
+                &extension,
+                bytes,
+                packets,
+                pushes,
+                context,
+            )
+            .await?;
         }
+        Ok(())
+    }
+
+    async fn upload_bytes(
+        &mut self,
+        command_id: u32,
+        extension: &[u8],
+        bytes: &[u8],
+        packets: &PacketRuntime,
+        pushes: &PushRuntime,
+        context: &mut OnlineContext<'_>,
+    ) -> Result<(), AccountActionError> {
+        self.ensure_session(packets, pushes, context).await?;
+        let session = self
+            .session
+            .as_ref()
+            .map(|(_, session)| session)
+            .ok_or(AccountActionError::QqFailure)?;
+        self.highway
+            .upload(
+                session,
+                &UploadIdentity {
+                    uin: context.uin,
+                    app_id: context.profile.app_id(),
+                    sub_app_id: context.profile.sub_app_id(),
+                    login_signature: context.credential.secrets().tgt(),
+                },
+                command_id,
+                extension,
+                bytes,
+            )
+            .await
+            .map_err(|_error| {
+                self.session = None;
+                AccountActionError::QqFailure
+            })?;
         Ok(())
     }
 
