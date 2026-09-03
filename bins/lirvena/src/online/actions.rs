@@ -78,6 +78,12 @@ pub(super) async fn execute_account_action(
             )
             .await
         }
+        "get_group_requests" => {
+            super::requests::list_group_requests(identity, packets, pushes, context).await
+        }
+        "get_friend_requests" => {
+            super::requests::list_friend_requests(identity, packets, pushes, context).await
+        }
         "get_msg" => get_message(request, resources.messages),
         "send_msg" => {
             send_message(
