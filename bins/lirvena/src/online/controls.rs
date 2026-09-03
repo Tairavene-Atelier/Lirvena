@@ -4,8 +4,8 @@ use account_api::{
     AccountActionError, AccountActionRequest, FriendRequestReference, GroupRequestReference,
 };
 use qq_control::{
-    ControlRequest, friend_like, friend_request, group_admin, group_ban, group_card, group_kick,
-    group_leave, group_name, group_request, group_special_title, group_whole_ban,
+    ControlRequest, delete_friend, friend_like, friend_request, group_admin, group_ban, group_card,
+    group_kick, group_leave, group_name, group_request, group_special_title, group_whole_ban,
     parse_control_response, poke,
 };
 use qq_directory::FriendEntry;
@@ -39,6 +39,15 @@ pub(super) async fn execute(
         let control = friend_like(&uid, optional_u32(params.get("times"), 1)?)
             .map_err(|_error| AccountActionError::BadParameters)?;
         send_control(&control, packets, pushes, context).await?;
+        return Ok(json!({}));
+    }
+    if request.action() == "delete_friend" {
+        let user_id = required_u32(params.get("user_id"))?;
+        let uid = directory::friend_uid(user_id, packets, pushes, friends, context).await?;
+        let control = delete_friend(&uid, optional_bool(params.get("block"), false)?)
+            .map_err(|_error| AccountActionError::BadParameters)?;
+        send_control(&control, packets, pushes, context).await?;
+        friends.remove(&user_id);
         return Ok(json!({}));
     }
     if request.action() == "set_group_add_request" {
