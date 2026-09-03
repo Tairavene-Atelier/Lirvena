@@ -36,6 +36,8 @@ Lagrange 兼容的 `send_poke`、`group_poke` 与 `friend_poke` 使用独立 QQ 
 明确确认后才返回成功。
 `set_group_reaction` 会把账号本地 `message_id` 严格解析回同群 QQ sequence，再提交添加或移除
 反应；缺失、过期或跨群的消息关联不会被伪造。
+对应的 Linux NT 群回应 Push 也会按冻结的三层结构解析，只有群号、消息 sequence 与操作者
+身份都能唯一解析时，才发出 Lagrange 兼容的 `group_msg_emoji_like` 通知。
 具有完整群消息关联的新记录还支持标准 `set_essence_msg` 与 `delete_essence_msg`；从旧存储
 代际迁移且缺少 random 的记录不会伪造精华操作。
 目录查询已覆盖好友、群、群成员和标准 `get_stranger_info`；公开资料响应会校验请求 QQ 号，

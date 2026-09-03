@@ -269,6 +269,33 @@ impl OnlineRuntime {
                         ),
                     }
                 }
+                DecodedPush::GroupReaction {
+                    reaction,
+                    occurred_at,
+                    ..
+                } => {
+                    match notices::resolve_group_reaction(
+                        &self.identity,
+                        &self.packets,
+                        &self.pushes,
+                        &mut self.messages,
+                        reaction,
+                        occurred_at,
+                        context,
+                    )
+                    .await
+                    {
+                        Some(reaction) => {
+                            let _delivered = self
+                                .events
+                                .publish(AccountEvent::GroupReaction(Box::new(reaction)));
+                        }
+                        None => eprintln!(
+                            "Lirvena retained no OneBot group reaction because its authenticated \
+                             message or operator correlation could not be resolved uniquely"
+                        ),
+                    }
+                }
                 DecodedPush::GroupRequest {
                     signal,
                     occurred_at,

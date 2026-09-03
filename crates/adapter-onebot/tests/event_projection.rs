@@ -3,7 +3,7 @@
 use account_api::{
     AccountEvent, AccountIdentity, FriendRequestReference, GroupRequestKind, GroupRequestReference,
     InboundMessage, ResolvedFriendRequest, ResolvedGroupNotice, ResolvedGroupNoticeKind,
-    ResolvedGroupRequest,
+    ResolvedGroupReaction, ResolvedGroupRequest,
 };
 use account_runtime::AccountLocalId;
 use adapter_onebot::{IdFormat, project_account_event, project_message_record};
@@ -345,6 +345,37 @@ fn unknown_group_notice_subtype_has_no_fabricated_projection() -> TestResult {
         1_800_000_000,
     )?));
     assert!(project_account_event(&event, IdFormat::Number).is_err());
+    Ok(())
+}
+
+#[test]
+fn group_reaction_uses_lagrange_compatible_notice_shape() -> TestResult {
+    let event = AccountEvent::GroupReaction(Box::new(ResolvedGroupReaction::new(
+        identity()?,
+        88,
+        91,
+        42,
+        true,
+        "14".to_owned(),
+        3,
+        1_800_000_000,
+    )?));
+    let projected =
+        project_account_event(&event, IdFormat::String)?.ok_or("missing reaction event")?;
+    assert_eq!(
+        projected,
+        json!({
+            "time": 1_800_000_000,
+            "self_id": "10001",
+            "post_type": "notice",
+            "notice_type": "group_msg_emoji_like",
+            "group_id": "88",
+            "user_id": "42",
+            "message_id": "91",
+            "likes": [{"emoji_id": "14", "count": 3}],
+            "is_add": true
+        })
+    );
     Ok(())
 }
 

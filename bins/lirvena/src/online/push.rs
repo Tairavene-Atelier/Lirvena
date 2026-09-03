@@ -3,9 +3,9 @@ use std::io;
 
 use qq_login::CredentialLogin;
 use qq_message::{
-    FriendRequestSignal, GroupNotice, GroupRequestSignal, MessageDecoder, MessageDisposition,
-    MessageEnvelope, RichTextMessage, decode_friend_request_signal, decode_group_notice,
-    decode_group_request_signal, decode_rich_text,
+    FriendRequestSignal, GroupNotice, GroupReaction, GroupRequestSignal, MessageDecoder,
+    MessageDisposition, MessageEnvelope, RichTextMessage, decode_friend_request_signal,
+    decode_group_notice, decode_group_reaction, decode_group_request_signal, decode_rich_text,
 };
 use qq_online::{PushOutcome, PushProcessor};
 use qq_profile::{LinuxNtProfile, PushPlan, decode_push_plan};
@@ -41,6 +41,11 @@ pub(super) enum DecodedPush {
         occurred_at: u64,
         encoded_len: usize,
     },
+    GroupReaction {
+        reaction: GroupReaction,
+        occurred_at: u64,
+        encoded_len: usize,
+    },
     GroupRequest {
         signal: GroupRequestSignal,
         occurred_at: u64,
@@ -57,6 +62,7 @@ impl DecodedPush {
         match self {
             Self::Message(message) => encoded_message_len(message),
             Self::GroupNotice { encoded_len, .. }
+            | Self::GroupReaction { encoded_len, .. }
             | Self::GroupRequest { encoded_len, .. }
             | Self::FriendRequest { encoded_len, .. } => *encoded_len,
         }
@@ -213,6 +219,18 @@ impl PushRuntime {
                 .ok_or_else(|| io::Error::other("message queue byte count overflow"))?;
             self.events.push_back(DecodedPush::GroupNotice {
                 notice,
+                occurred_at: u64::try_from(envelope.timestamp()).unwrap_or_default(),
+                encoded_len,
+            });
+            return Ok(());
+        }
+        if let Some(reaction) = decode_group_reaction(&envelope)? {
+            self.queued_message_bytes = self
+                .queued_message_bytes
+                .checked_add(encoded_len)
+                .ok_or_else(|| io::Error::other("message queue byte count overflow"))?;
+            self.events.push_back(DecodedPush::GroupReaction {
+                reaction,
                 occurred_at: u64::try_from(envelope.timestamp()).unwrap_or_default(),
                 encoded_len,
             });

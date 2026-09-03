@@ -147,6 +147,8 @@ pub enum AccountEvent {
     Message(Box<InboundMessage>),
     /// One authenticated group-system notice with resolved numeric identities.
     GroupNotice(Box<crate::ResolvedGroupNotice>),
+    /// One authenticated group-message reaction with a retained local message correlation.
+    GroupReaction(Box<crate::ResolvedGroupReaction>),
     /// One authenticated group request with an actionable, versioned reference.
     GroupRequest(Box<crate::ResolvedGroupRequest>),
     /// One authenticated friend request with an actionable, versioned reference.

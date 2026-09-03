@@ -166,6 +166,7 @@ fn record_event(
     let result = match event {
         AccountEvent::IdentityReady(_)
         | AccountEvent::GroupNotice(_)
+        | AccountEvent::GroupReaction(_)
         | AccountEvent::GroupRequest(_)
         | AccountEvent::FriendRequest(_) => Ok(()),
         AccountEvent::Message(_) => now_ms()
