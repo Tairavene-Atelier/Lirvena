@@ -8,6 +8,6 @@ mod proto;
 pub use decode::decode_rich_text;
 pub use media::{ImageSegment, MediaFile, MediaScope, VideoSegment, VoiceSegment};
 pub use model::{
-    FaceKind, FaceSegment, MentionSegment, MentionTarget, OpaqueAttachment, PokeSegment,
-    ReplySegment, RichTextElement, RichTextMessage, Segment, XmlSegment,
+    FaceKind, FaceSegment, ForwardSegment, MentionSegment, MentionTarget, OpaqueAttachment,
+    PokeSegment, ReplySegment, RichTextElement, RichTextMessage, Segment, XmlSegment,
 };

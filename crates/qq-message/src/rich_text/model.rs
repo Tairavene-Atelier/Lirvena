@@ -98,8 +98,28 @@ pub enum Segment {
     Poke(PokeSegment),
     /// Incoming reply reference with stable QQ correlations.
     Reply(ReplySegment),
+    /// Incoming merged-forward resource.
+    Forward(ForwardSegment),
     /// A valid element without one unambiguous compiled projection yet.
     Unsupported,
+}
+
+/// QQ resource identifier carried by a merged-forward message.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ForwardSegment {
+    resource_id: String,
+}
+
+impl ForwardSegment {
+    pub(super) const fn new(resource_id: String) -> Self {
+        Self { resource_id }
+    }
+
+    /// Returns the opaque QQ long-message resource identifier.
+    #[must_use]
+    pub fn resource_id(&self) -> &str {
+        &self.resource_id
+    }
 }
 
 /// QQ correlation carried by an incoming reply element.

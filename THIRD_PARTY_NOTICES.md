@@ -21,9 +21,10 @@ GPLv3 terms and adds the AGPL network-source condition for the combined work.
 
 ## QQ message and directory protobuf contracts
 
-The field-level interoperability contracts in `crates/qq-message/src/outbound.rs`
-and `crates/qq-directory/src/friend.rs` were independently transcribed to Rust
-from the public Lagrange Core packet definitions and verified with local golden
+The field-level interoperability contracts in `crates/qq-message/src/outbound.rs`,
+`crates/qq-message/src/long_message.rs`, `crates/qq-message/src/rich_text`, and
+`crates/qq-directory/src/friend.rs` were independently transcribed to Rust from
+the public Lagrange Core packet definitions and verified with local golden
 vectors. No Lagrange runtime architecture or reflection machinery is embedded.
 
 - Upstream: <https://github.com/LagrangeDev/Lagrange.Core>

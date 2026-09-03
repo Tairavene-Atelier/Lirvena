@@ -227,6 +227,26 @@ fn json_xml_and_poke_are_projected_from_both_rich_generations() -> TestResult {
 }
 
 #[test]
+fn merged_forward_resource_is_projected_from_52194_xml_and_modern_json() -> TestResult {
+    let input = rich([
+        rich_message(35, "<msg m_resid=\"resource-old\"/>")?,
+        light_app(
+            "{\"app\":\"com.tencent.multimsg\",\"meta\":{\"detail\":{\"resid\":\"resource-new\"}}}",
+        )?,
+    ]);
+    let decoded = decode_rich_text(&input)?;
+    let Segment::Forward(old) = decoded.elements()[0].segment() else {
+        return Err("expected old forward".into());
+    };
+    let Segment::Forward(new) = decoded.elements()[1].segment() else {
+        return Err("expected new forward".into());
+    };
+    assert_eq!(old.resource_id(), "resource-old");
+    assert_eq!(new.resource_id(), "resource-new");
+    Ok(())
+}
+
+#[test]
 fn reply_projects_only_complete_source_correlations() -> TestResult {
     let source = SourceFixture {
         sequences: vec![101],

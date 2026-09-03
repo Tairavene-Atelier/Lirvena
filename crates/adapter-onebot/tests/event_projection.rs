@@ -212,6 +212,10 @@ fn rich_segments_project_to_standard_onebot_shapes() -> TestResult {
                 body: "<msg/>",
                 service_id: 35,
             },
+            OutboundSegment::Xml {
+                body: "<msg m_resid=\"forward-1\"/>",
+                service_id: 35,
+            },
             OutboundSegment::Poke {
                 kind: 2,
                 strength: 7,
@@ -237,12 +241,13 @@ fn rich_segments_project_to_standard_onebot_shapes() -> TestResult {
         json!([
             {"type": "json", "data": {"data": "{\"app\":\"demo\"}"}},
             {"type": "xml", "data": {"data": "<msg/>", "service_id": 35}},
+            {"type": "forward", "data": {"id": "forward-1"}},
             {"type": "poke", "data": {"type": 2, "strength": 7, "id": -1}}
         ])
     );
     assert_eq!(
         projected["raw_message"],
-        "[CQ:json][CQ:xml][CQ:poke,type=2,strength=7]"
+        "[CQ:json][CQ:xml][CQ:forward,id=forward-1][CQ:poke,type=2,strength=7]"
     );
     Ok(())
 }
