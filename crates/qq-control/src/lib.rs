@@ -11,6 +11,7 @@ mod friend_request;
 mod group_file;
 mod group_request;
 mod poke;
+mod private_file;
 mod reaction;
 
 pub use delete_friend::delete_friend;
@@ -30,6 +31,7 @@ pub use group_file::{
 };
 pub use group_request::group_request;
 pub use poke::poke;
+pub use private_file::{parse_private_file_url_response, private_file_url};
 pub use reaction::{EmojiChainTarget, group_reaction, join_emoji_chain};
 
 const MAX_UID_BYTES: usize = 128;

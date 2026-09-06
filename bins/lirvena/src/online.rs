@@ -14,6 +14,7 @@ mod message_registry;
 mod notices;
 mod packets;
 mod parameters;
+mod private_file;
 mod push;
 mod reaction;
 mod read_report;
