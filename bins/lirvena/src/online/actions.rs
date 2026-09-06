@@ -165,6 +165,12 @@ pub(super) async fn execute_account_action(
         | "rename_group_file_folder" => {
             super::group_files::mutate(request, packets, pushes, context).await
         }
+        "get_group_root_files" | "get_group_files_by_folder" => {
+            super::group_files::list(request, packets, pushes, context).await
+        }
+        "get_group_file_url" => {
+            super::group_files::download_url(request, packets, pushes, context).await
+        }
         "set_group_reaction"
         | "set_msg_emoji_like"
         | ".join_group_emoji_chain"

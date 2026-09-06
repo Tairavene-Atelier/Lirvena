@@ -1,7 +1,9 @@
 use account_api::{AccountActionError, AccountActionRequest};
 use qq_control::{
-    GroupFileControl, create_group_file_folder, delete_group_file, delete_group_file_folder,
-    move_group_file, rename_group_file_folder,
+    GroupFileControl, GroupFileEntry, create_group_file_folder, delete_group_file,
+    delete_group_file_folder, group_file_download_request, group_file_list_request,
+    move_group_file, parse_group_file_download_response, parse_group_file_list_response,
+    rename_group_file_folder,
 };
 use serde_json::{Value, json};
 
@@ -10,6 +12,84 @@ use super::packets::PacketRuntime;
 use super::parameters::{required_text, required_u32};
 use super::push::PushRuntime;
 use super::runtime::OnlineContext;
+
+const MAX_LIST_PAGES: u32 = 256;
+
+pub(super) async fn list(
+    request: &AccountActionRequest,
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    context: &mut OnlineContext<'_>,
+) -> Result<Value, AccountActionError> {
+    let group_uin = required_u32(request.params().get("group_id"))?;
+    let directory = match request.action() {
+        "get_group_root_files" => "/",
+        "get_group_files_by_folder" => required_text(request.params().get("folder_id"))?,
+        _ => return Err(AccountActionError::ActionNotFound),
+    };
+    let mut files = Vec::new();
+    let mut folders = Vec::new();
+    for page_index in 0..MAX_LIST_PAGES {
+        let start_index = page_index
+            .checked_mul(20)
+            .ok_or(AccountActionError::QqFailure)?;
+        let query = group_file_list_request(group_uin, directory, start_index)
+            .map_err(|_error| AccountActionError::BadParameters)?;
+        let response = send_control_response(&query, packets, pushes, context).await?;
+        let page = parse_group_file_list_response(&response)
+            .map_err(|_error| AccountActionError::QqFailure)?;
+        let is_empty = page.entries.is_empty();
+        for entry in page.entries {
+            match entry {
+                GroupFileEntry::File(file) => files.push(json!({
+                    "group_id": group_uin,
+                    "file_id": file.file_id,
+                    "file_name": file.file_name,
+                    "busid": 0,
+                    "file_size": file.file_size,
+                    "upload_time": file.uploaded_time,
+                    "dead_time": file.expire_time,
+                    "modify_time": file.modified_time,
+                    "download_times": file.downloaded_times,
+                    "uploader": file.uploader_uin,
+                    "uploader_name": file.uploader_name,
+                })),
+                GroupFileEntry::Folder(folder) => folders.push(json!({
+                    "group_id": group_uin,
+                    "folder_id": folder.folder_id,
+                    "folder_name": folder.folder_name,
+                    "create_time": folder.create_time,
+                    "creator": folder.creator_uin,
+                    "create_name": folder.creator_name,
+                    "total_file_count": folder.total_file_count,
+                })),
+            }
+        }
+        if page.is_end {
+            return Ok(json!({"files": files, "folders": folders}));
+        }
+        if is_empty {
+            return Err(AccountActionError::QqFailure);
+        }
+    }
+    Err(AccountActionError::QqFailure)
+}
+
+pub(super) async fn download_url(
+    request: &AccountActionRequest,
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    context: &mut OnlineContext<'_>,
+) -> Result<Value, AccountActionError> {
+    let group_uin = required_u32(request.params().get("group_id"))?;
+    let file_id = required_text(request.params().get("file_id"))?;
+    let query = group_file_download_request(group_uin, file_id)
+        .map_err(|_error| AccountActionError::BadParameters)?;
+    let response = send_control_response(&query, packets, pushes, context).await?;
+    let url = parse_group_file_download_response(&response, file_id)
+        .map_err(|_error| AccountActionError::QqFailure)?;
+    Ok(json!({"url": url}))
+}
 
 pub(super) async fn mutate(
     request: &AccountActionRequest,
