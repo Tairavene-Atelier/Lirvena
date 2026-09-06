@@ -4,11 +4,11 @@ use std::time::{Duration, Instant};
 use account_api::AccountActionError;
 use qq_highway::{HighwayClient, HighwaySession, UploadIdentity};
 use qq_media::{
-    AvatarTarget, MediaPolicy, MediaReference, MediaResolver, MediaTarget, RemoteMediaPolicy,
-    RichMediaUploadPlan, analyze_image, analyze_video, avatar_upload, default_video_thumbnail,
-    encode_image_metadata_request, encode_record_metadata_request, encode_video_metadata_request,
-    parse_image_metadata_response, parse_record_metadata_response, parse_video_metadata_response,
-    prepare_record,
+    AvatarTarget, MediaObject, MediaPolicy, MediaReference, MediaResolver, MediaTarget,
+    RemoteMediaPolicy, RichMediaUploadPlan, analyze_image, analyze_video, avatar_upload,
+    default_video_thumbnail, encode_image_metadata_request, encode_record_metadata_request,
+    encode_video_metadata_request, parse_image_metadata_response, parse_record_metadata_response,
+    parse_video_metadata_response, prepare_record,
 };
 
 use super::packets::{PacketContext, PacketRuntime};
@@ -58,6 +58,16 @@ impl MediaRuntime {
         })
     }
 
+    pub(super) async fn resolve(
+        &self,
+        reference: &MediaReference,
+    ) -> Result<MediaObject, AccountActionError> {
+        self.resolver
+            .resolve(reference)
+            .await
+            .map_err(|_error| AccountActionError::QqFailure)
+    }
+
     pub(super) async fn upload_image(
         &mut self,
         reference: &str,
@@ -68,11 +78,7 @@ impl MediaRuntime {
     ) -> Result<UploadedImage, AccountActionError> {
         let reference =
             MediaReference::parse(reference).map_err(|_error| AccountActionError::BadParameters)?;
-        let object = self
-            .resolver
-            .resolve(&reference)
-            .await
-            .map_err(|_error| AccountActionError::QqFailure)?;
+        let object = self.resolve(&reference).await?;
         let descriptor =
             analyze_image(object.bytes()).map_err(|_error| AccountActionError::BadParameters)?;
         let request = encode_image_metadata_request(
@@ -112,11 +118,7 @@ impl MediaRuntime {
     ) -> Result<(), AccountActionError> {
         let reference =
             MediaReference::parse(reference).map_err(|_error| AccountActionError::BadParameters)?;
-        let object = self
-            .resolver
-            .resolve(&reference)
-            .await
-            .map_err(|_error| AccountActionError::QqFailure)?;
+        let object = self.resolve(&reference).await?;
         analyze_image(object.bytes()).map_err(|_error| AccountActionError::BadParameters)?;
         let upload = avatar_upload(target).map_err(|_error| AccountActionError::BadParameters)?;
         self.upload_bytes(
@@ -140,11 +142,7 @@ impl MediaRuntime {
     ) -> Result<UploadedRecord, AccountActionError> {
         let reference =
             MediaReference::parse(reference).map_err(|_error| AccountActionError::BadParameters)?;
-        let object = self
-            .resolver
-            .resolve(&reference)
-            .await
-            .map_err(|_error| AccountActionError::QqFailure)?;
+        let object = self.resolve(&reference).await?;
         let record =
             prepare_record(object.bytes()).map_err(|_error| AccountActionError::BadParameters)?;
         let request = encode_record_metadata_request(
@@ -183,11 +181,7 @@ impl MediaRuntime {
     ) -> Result<UploadedVideo, AccountActionError> {
         let reference =
             MediaReference::parse(reference).map_err(|_error| AccountActionError::BadParameters)?;
-        let object = self
-            .resolver
-            .resolve(&reference)
-            .await
-            .map_err(|_error| AccountActionError::QqFailure)?;
+        let object = self.resolve(&reference).await?;
         let video =
             analyze_video(object.bytes()).map_err(|_error| AccountActionError::BadParameters)?;
         let thumbnail_bytes = default_video_thumbnail();
@@ -255,7 +249,7 @@ impl MediaRuntime {
         Ok(())
     }
 
-    async fn upload_bytes(
+    pub(super) async fn upload_bytes(
         &mut self,
         command_id: u32,
         extension: &[u8],

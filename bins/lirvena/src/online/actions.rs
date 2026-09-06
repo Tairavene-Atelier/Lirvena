@@ -171,6 +171,9 @@ pub(super) async fn execute_account_action(
         "get_group_file_url" => {
             super::group_files::download_url(request, packets, pushes, context).await
         }
+        "upload_group_file" => {
+            super::group_files::upload(request, resources.media, packets, pushes, context).await
+        }
         "set_group_reaction"
         | "set_msg_emoji_like"
         | ".join_group_emoji_chain"

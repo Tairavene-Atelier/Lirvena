@@ -1,3 +1,5 @@
+use md5::Md5;
+use sha1::Sha1;
 use sha2::{Digest, Sha256};
 
 /// Origin class retained without logging the source value.
@@ -17,6 +19,8 @@ pub enum MediaSourceKind {
 #[derive(Clone, Eq, PartialEq)]
 pub struct MediaObject {
     bytes: Box<[u8]>,
+    md5: [u8; 16],
+    sha1: [u8; 20],
     digest: [u8; 32],
     source: MediaSourceKind,
 }
@@ -25,6 +29,8 @@ impl MediaObject {
     pub(crate) fn new(bytes: Vec<u8>, source: MediaSourceKind) -> Self {
         let digest = Sha256::digest(&bytes).into();
         Self {
+            md5: Md5::digest(&bytes).into(),
+            sha1: Sha1::digest(&bytes).into(),
             bytes: bytes.into_boxed_slice(),
             digest,
             source,
@@ -41,6 +47,18 @@ impl MediaObject {
     #[must_use]
     pub const fn sha256(&self) -> [u8; 32] {
         self.digest
+    }
+
+    /// Returns the immutable content MD5 required by QQ upload metadata.
+    #[must_use]
+    pub const fn md5(&self) -> [u8; 16] {
+        self.md5
+    }
+
+    /// Returns the immutable content SHA-1 required by QQ upload metadata.
+    #[must_use]
+    pub const fn sha1(&self) -> [u8; 20] {
+        self.sha1
     }
 
     /// Returns the source class without retaining its sensitive value.

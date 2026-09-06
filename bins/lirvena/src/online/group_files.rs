@@ -1,19 +1,86 @@
 use account_api::{AccountActionError, AccountActionRequest};
 use qq_control::{
-    GroupFileControl, GroupFileEntry, create_group_file_folder, delete_group_file,
-    delete_group_file_folder, group_file_download_request, group_file_list_request,
+    GroupFileControl, GroupFileEntry, GroupFileUploadSpec, create_group_file_folder,
+    delete_group_file, delete_group_file_folder, group_file_complete_request,
+    group_file_download_request, group_file_list_request, group_file_upload_request,
     move_group_file, parse_group_file_download_response, parse_group_file_list_response,
-    rename_group_file_folder,
+    parse_group_file_upload_response, rename_group_file_folder,
 };
+use qq_media::MediaReference;
 use serde_json::{Value, json};
 
-use super::controls::send_control_response;
+use super::controls::{send_control, send_control_response};
+use super::media::MediaRuntime;
 use super::packets::PacketRuntime;
 use super::parameters::{required_text, required_u32};
 use super::push::PushRuntime;
 use super::runtime::OnlineContext;
+use crate::support::random_nonzero_u32;
 
 const MAX_LIST_PAGES: u32 = 256;
+const GROUP_FILE_HIGHWAY_COMMAND: u32 = 71;
+
+pub(super) async fn upload(
+    request: &AccountActionRequest,
+    media: &mut MediaRuntime,
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    context: &mut OnlineContext<'_>,
+) -> Result<Value, AccountActionError> {
+    let params = request.params();
+    let group_uin = required_u32(params.get("group_id"))?;
+    let reference = MediaReference::parse(required_text(params.get("file"))?)
+        .map_err(|_error| AccountActionError::BadParameters)?;
+    let file_name = params
+        .get("name")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .or_else(|| reference.suggested_file_name())
+        .unwrap_or("file");
+    let target_directory = params
+        .get("folder")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("/");
+    let object = media.resolve(&reference).await?;
+    let file_size =
+        u64::try_from(object.bytes().len()).map_err(|_error| AccountActionError::BadParameters)?;
+    let upload = group_file_upload_request(&GroupFileUploadSpec {
+        group_uin,
+        target_directory,
+        file_name,
+        file_size,
+        sha1: &object.sha1(),
+        md5: &object.md5(),
+    })
+    .map_err(|_error| AccountActionError::BadParameters)?;
+    let response = send_control_response(&upload, packets, pushes, context).await?;
+    let plan = parse_group_file_upload_response(&response)
+        .map_err(|_error| AccountActionError::QqFailure)?;
+    if !plan.file_exists() {
+        let extension = plan
+            .highway_extension(context.uin, group_uin, file_name, file_size, &object.md5())
+            .map_err(|_error| AccountActionError::QqFailure)?;
+        media
+            .upload_bytes(
+                GROUP_FILE_HIGHWAY_COMMAND,
+                &extension,
+                object.bytes(),
+                packets,
+                pushes,
+                context,
+            )
+            .await?;
+    }
+    let completion = group_file_complete_request(
+        group_uin,
+        plan.file_id(),
+        random_nonzero_u32().map_err(|_error| AccountActionError::QqFailure)?,
+    )
+    .map_err(|_error| AccountActionError::QqFailure)?;
+    send_control(&completion, packets, pushes, context).await?;
+    Ok(json!({}))
+}
 
 pub(super) async fn list(
     request: &AccountActionRequest,

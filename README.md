@@ -56,6 +56,8 @@ Lagrange 兼容的 `send_poke`、`group_poke` 与 `friend_poke` 使用独立 QQ 
 操作内层结果；参数或任一层响应不完整时都失败关闭。
 群文件根目录、子目录列表使用有界分页并拒绝未知条目；下载地址只由 QQ 返回的受限 HTTPS
 定位信息构造，不接受可能改变查询语义的文件标识符。
+`upload_group_file` 复用统一媒体解析与 Highway 会话，支持 QQ fast-upload，并只在 Ceylith
+签名的最终提交得到 QQ 确认后返回成功。
 完整 OneBot 和生产部署尚未完成，因此当前版本仍不能声称已经登录或稳定在线。
 
 账号授权模式固定为 `public`、`require_grant` 和 `allow_public_fallback`。缺少授权时，

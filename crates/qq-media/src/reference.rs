@@ -59,6 +59,16 @@ impl MediaReference {
         }
         Ok(Self::Local(PathBuf::from(value)))
     }
+
+    /// Returns a source-derived display name when the reference carries one.
+    #[must_use]
+    pub fn suggested_file_name(&self) -> Option<&str> {
+        match self {
+            Self::Local(path) => path.file_name()?.to_str(),
+            Self::Remote(url) => url.path_segments()?.rfind(|part| !part.is_empty()),
+            Self::InlineBase64(_) | Self::Cache(_) => None,
+        }
+    }
 }
 
 fn valid_cache_key(value: &str) -> bool {
