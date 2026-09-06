@@ -85,6 +85,9 @@ pub(super) async fn execute_account_action(
         "get_friend_requests" => {
             super::requests::list_friend_requests(identity, packets, pushes, context).await
         }
+        "fetch_custom_face" | "fetch_mface_key" => {
+            super::face_asset::execute(request, packets, pushes, context).await
+        }
         "get_msg" => get_message(request, resources.messages),
         "get_forward_msg" => {
             super::long_message::get_forward_message(request, packets, pushes, context).await

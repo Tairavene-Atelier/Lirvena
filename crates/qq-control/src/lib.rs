@@ -6,6 +6,7 @@ use qq_wire::{decode_oidb_response, encode_oidb_request};
 
 mod delete_friend;
 mod essence;
+mod face_asset;
 mod friend_request;
 mod group_file;
 mod group_request;
@@ -14,6 +15,10 @@ mod reaction;
 
 pub use delete_friend::delete_friend;
 pub use essence::{delete_group_essence, set_group_essence};
+pub use face_asset::{
+    fetch_custom_faces, fetch_market_face_keys, parse_custom_faces_response,
+    parse_market_face_keys_response,
+};
 pub use friend_request::friend_request;
 pub use group_file::{
     GroupFileControl, GroupFileEntry, GroupFileInfo, GroupFilePage, GroupFileUploadPlan,
