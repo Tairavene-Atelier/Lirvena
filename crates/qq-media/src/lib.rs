@@ -2,6 +2,7 @@
 //! Bounded media acquisition and conversion for Lirvena.
 
 mod avatar;
+mod download;
 mod error;
 mod ffmpeg;
 mod image;
@@ -16,6 +17,9 @@ mod upload;
 mod video;
 
 pub use avatar::{AvatarTarget, AvatarUpload, avatar_upload};
+pub use download::{
+    ImageDownloadRequest, encode_image_download_request, parse_image_download_response,
+};
 pub use error::MediaError;
 pub use ffmpeg::{AudioFormat, FfmpegTranscoder, TranscodePolicy};
 pub use image::{

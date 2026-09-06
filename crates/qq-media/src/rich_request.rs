@@ -82,6 +82,7 @@ pub(crate) fn encode(spec: RichRequestSpec<'_>) -> Result<EncodedRichRequest, Me
             client_sequence: 10,
             no_compatibility_message: false,
         }),
+        download: None,
     }
     .encode_to_vec();
     let body = qq_wire::encode_oidb_request(oidb_command, 100, &inner, 1)

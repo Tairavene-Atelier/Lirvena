@@ -41,6 +41,7 @@ mod tests {
                         ..FileInfo::default()
                     }),
                     uuid: name.to_owned(),
+                    ..IndexNode::default()
                 }
                 .encode_to_vec(),
             }
@@ -76,6 +77,7 @@ mod tests {
                     }],
                 }],
             }),
+            download: None,
         }
         .encode_to_vec();
         let outer = qq_wire::encode_oidb_request(0x11ea, 100, &rich, 0)?;

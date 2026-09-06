@@ -39,6 +39,7 @@ mod tests {
                 ..FileInfo::default()
             }),
             uuid: "uuid".to_owned(),
+            ..IndexNode::default()
         }
         .encode_to_vec();
         let message_info = RawMessageInfo {
@@ -61,6 +62,7 @@ mod tests {
                 compatibility_message: vec![0x08, 0x01],
                 sub_files: Vec::new(),
             }),
+            download: None,
         }
         .encode_to_vec();
         let outer = qq_wire::encode_oidb_request(0x11c4, 100, &rich, 0)?;
@@ -87,6 +89,7 @@ mod tests {
                 compatibility_message: Vec::new(),
                 sub_files: Vec::new(),
             }),
+            download: None,
         }
         .encode_to_vec();
         let outer = qq_wire::encode_oidb_request(0x11c5, 100, &rich, 0)?;

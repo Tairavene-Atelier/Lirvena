@@ -158,6 +158,9 @@ pub(super) async fn execute_account_action(
         "set_qq_avatar" | "set_group_portrait" => {
             super::avatar::upload(request, resources.media, packets, pushes, context).await
         }
+        "upload_image" => {
+            super::image::upload(request, resources.media, packets, pushes, context).await
+        }
         "delete_group_file"
         | "move_group_file"
         | "create_group_file_folder"

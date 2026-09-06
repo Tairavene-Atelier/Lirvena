@@ -5,6 +5,7 @@ mod directory;
 mod essence;
 mod group_files;
 mod history;
+mod image;
 mod long_message;
 mod media;
 mod message_recall;
