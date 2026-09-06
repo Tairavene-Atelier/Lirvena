@@ -6,6 +6,8 @@ pub(super) struct RichRequest {
     pub head: Option<RequestHead>,
     #[prost(message, optional, tag = "2")]
     pub upload: Option<UploadRequest>,
+    #[prost(message, optional, tag = "3")]
+    pub download: Option<DownloadRequest>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -164,6 +166,41 @@ pub(super) struct RichResponse {
     pub head: Option<ResponseHead>,
     #[prost(message, optional, tag = "2")]
     pub upload: Option<UploadResponse>,
+    #[prost(message, optional, tag = "3")]
+    pub download: Option<DownloadResponse>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub(super) struct DownloadRequest {
+    #[prost(message, optional, tag = "1")]
+    pub index: Option<IndexNode>,
+    #[prost(message, optional, tag = "2")]
+    pub extension: Option<DownloadExtension>,
+}
+
+#[derive(Clone, Copy, PartialEq, Message)]
+pub(super) struct DownloadExtension {
+    #[prost(message, optional, tag = "1")]
+    pub picture: Option<PictureDownloadExtension>,
+}
+
+#[derive(Clone, Copy, PartialEq, Message)]
+pub(super) struct PictureDownloadExtension {}
+
+#[derive(Clone, PartialEq, Message)]
+pub(super) struct DownloadResponse {
+    #[prost(string, tag = "1")]
+    pub rkey_parameter: String,
+    #[prost(message, optional, tag = "3")]
+    pub info: Option<DownloadInfo>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub(super) struct DownloadInfo {
+    #[prost(string, tag = "1")]
+    pub domain: String,
+    #[prost(string, tag = "2")]
+    pub path: String,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -226,6 +263,14 @@ pub(super) struct IndexNode {
     pub info: Option<FileInfo>,
     #[prost(string, tag = "2")]
     pub uuid: String,
+    #[prost(uint32, tag = "3")]
+    pub store_id: u32,
+    #[prost(uint32, tag = "4")]
+    pub upload_time: u32,
+    #[prost(uint32, tag = "5")]
+    pub ttl: u32,
+    #[prost(uint32, tag = "6")]
+    pub sub_type: u32,
 }
 
 #[derive(Clone, PartialEq, Message)]

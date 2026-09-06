@@ -6,9 +6,10 @@ use qq_highway::{HighwayClient, HighwaySession, UploadIdentity};
 use qq_media::{
     AvatarTarget, MediaObject, MediaPolicy, MediaReference, MediaResolver, MediaTarget,
     RemoteMediaPolicy, RichMediaUploadPlan, analyze_image, analyze_video, avatar_upload,
-    default_video_thumbnail, encode_image_metadata_request, encode_record_metadata_request,
-    encode_video_metadata_request, parse_image_metadata_response, parse_record_metadata_response,
-    parse_video_metadata_response, prepare_record,
+    default_video_thumbnail, encode_image_download_request, encode_image_metadata_request,
+    encode_record_metadata_request, encode_video_metadata_request, parse_image_download_response,
+    parse_image_metadata_response, parse_record_metadata_response, parse_video_metadata_response,
+    prepare_record,
 };
 
 use super::packets::{PacketContext, PacketRuntime};
@@ -106,6 +107,37 @@ impl MediaRuntime {
             message_info,
             compatibility,
         })
+    }
+
+    pub(super) async fn upload_image_url(
+        &mut self,
+        reference: &str,
+        packets: &PacketRuntime,
+        pushes: &PushRuntime,
+        context: &mut OnlineContext<'_>,
+    ) -> Result<String, AccountActionError> {
+        let account_uid = context.credential.uid().to_owned();
+        let uploaded = self
+            .upload_image(
+                reference,
+                MediaTarget::Direct(&account_uid),
+                packets,
+                pushes,
+                context,
+            )
+            .await?;
+        let request = encode_image_download_request(&uploaded.message_info, &account_uid)
+            .map_err(|_error| AccountActionError::QqFailure)?;
+        let response = packets
+            .send_with_reserve(
+                PacketContext::for_account(context, pushes.plan()),
+                request.command(),
+                &[],
+                request.body(),
+            )
+            .await
+            .map_err(|_error| AccountActionError::QqFailure)?;
+        parse_image_download_response(&response).map_err(|_error| AccountActionError::QqFailure)
     }
 
     pub(super) async fn upload_avatar(
