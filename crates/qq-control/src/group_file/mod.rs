@@ -1,5 +1,6 @@
 mod mutation;
 mod read;
+mod upload;
 
 pub use mutation::{
     GroupFileControl, create_group_file_folder, delete_group_file, delete_group_file_folder,
@@ -8,4 +9,8 @@ pub use mutation::{
 pub use read::{
     GroupFileEntry, GroupFileInfo, GroupFilePage, GroupFolderInfo, group_file_download_request,
     group_file_list_request, parse_group_file_download_response, parse_group_file_list_response,
+};
+pub use upload::{
+    GroupFileUploadPlan, GroupFileUploadSpec, group_file_complete_request,
+    group_file_upload_request, parse_group_file_upload_response,
 };

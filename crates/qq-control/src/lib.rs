@@ -16,10 +16,12 @@ pub use delete_friend::delete_friend;
 pub use essence::{delete_group_essence, set_group_essence};
 pub use friend_request::friend_request;
 pub use group_file::{
-    GroupFileControl, GroupFileEntry, GroupFileInfo, GroupFilePage, GroupFolderInfo,
-    create_group_file_folder, delete_group_file, delete_group_file_folder,
-    group_file_download_request, group_file_list_request, move_group_file,
-    parse_group_file_download_response, parse_group_file_list_response, rename_group_file_folder,
+    GroupFileControl, GroupFileEntry, GroupFileInfo, GroupFilePage, GroupFileUploadPlan,
+    GroupFileUploadSpec, GroupFolderInfo, create_group_file_folder, delete_group_file,
+    delete_group_file_folder, group_file_complete_request, group_file_download_request,
+    group_file_list_request, group_file_upload_request, move_group_file,
+    parse_group_file_download_response, parse_group_file_list_response,
+    parse_group_file_upload_response, rename_group_file_folder,
 };
 pub use group_request::group_request;
 pub use poke::poke;
