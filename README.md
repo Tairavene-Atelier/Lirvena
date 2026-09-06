@@ -60,6 +60,8 @@ Ceylith 签名 Profile，返回路径和表情 key 不完整或超限时均明�
 操作内层结果；参数或任一层响应不完整时都失败关闭。
 群文件根目录、子目录列表使用有界分页并拒绝未知条目；下载地址只由 QQ 返回的受限 HTTPS
 定位信息构造，不接受可能改变查询语义的文件标识符。
+`get_private_file_url` 会先从真实好友目录解析目标 UID，再把文件 ID 与 hash 交给 QQ 换取
+Lagrange 兼容的临时 HTTP 地址；Lirvena 只返回该地址而不会代替调用方访问它。
 `upload_group_file` 复用统一媒体解析与 Highway 会话，支持 QQ fast-upload，并只在 Ceylith
 签名的最终提交得到 QQ 确认后返回成功。
 完整 OneBot 和生产部署尚未完成，因此当前版本仍不能声称已经登录或稳定在线。
