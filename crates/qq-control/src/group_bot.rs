@@ -54,7 +54,7 @@ pub fn group_bot_callback(
         0x112e,
         1,
         "OidbSvcTrpcTcp.0x112e_1",
-        None,
+        Some(12),
         &GroupBotCallback {
             bot_id,
             sequence: 11_111,
@@ -128,6 +128,7 @@ mod tests {
         let outer = qq_wire::decode_oidb_request(request.body())?;
         let body = GroupBotCallback::decode(outer.body())?;
         assert_eq!((outer.command(), outer.subcommand()), (0x112e, 1));
+        assert_eq!(request.signing_operation(), Some(12));
         assert_eq!(
             (body.sequence, body.reserved, body.group_kind),
             (11_111, 0, 1)
