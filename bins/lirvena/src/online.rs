@@ -20,6 +20,7 @@ mod reaction;
 mod read_report;
 mod requests;
 mod runtime;
+mod ticket;
 mod user_profile;
 
 pub(crate) use runtime::{OnlineContext, OnlineRuntime};

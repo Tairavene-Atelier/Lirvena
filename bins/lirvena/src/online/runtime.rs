@@ -21,6 +21,7 @@ use super::message_registry::MessageRegistry;
 use super::notices;
 use super::packets::{PacketContext, PacketRuntime};
 use super::push::{DecodedPush, PushRuntime};
+use super::ticket::TicketRuntime;
 use crate::action_runtime::{self, BootstrapContext};
 use crate::support::now_ms;
 
@@ -47,6 +48,7 @@ pub(crate) struct OnlineRuntime {
     friends: BTreeMap<u32, FriendEntry>,
     messages: MessageRegistry,
     media: MediaRuntime,
+    tickets: TicketRuntime,
 }
 
 impl OnlineRuntime {
@@ -68,6 +70,7 @@ impl OnlineRuntime {
             friends: BTreeMap::new(),
             messages,
             media: MediaRuntime::new(state_directory)?,
+            tickets: TicketRuntime::new()?,
         })
     }
 
@@ -216,6 +219,7 @@ impl OnlineRuntime {
                         &mut ActionResources {
                             messages: &mut self.messages,
                             media: &mut self.media,
+                            tickets: &mut self.tickets,
                         },
                         &mut context,
                     ).await;

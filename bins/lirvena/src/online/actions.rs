@@ -20,6 +20,7 @@ use super::parameters::required_u32;
 use super::push::PushRuntime;
 use super::read_report::mark_message_read;
 use super::runtime::OnlineContext;
+use super::ticket::TicketRuntime;
 use super::user_profile::stranger_info;
 use crate::opaque::{OpaqueOperation, request_reserve};
 use crate::support::{now_ms, now_seconds, random_nonzero_u32};
@@ -27,6 +28,7 @@ use crate::support::{now_ms, now_seconds, random_nonzero_u32};
 pub(super) struct ActionResources<'a> {
     pub(super) messages: &'a mut MessageRegistry,
     pub(super) media: &'a mut MediaRuntime,
+    pub(super) tickets: &'a mut TicketRuntime,
 }
 
 pub(super) async fn execute_account_action(
@@ -50,6 +52,12 @@ pub(super) async fn execute_account_action(
             "protocol_version": "v11",
         })),
         "can_send_image" | "can_send_record" => Ok(json!({"yes": true})),
+        "get_cookies" | "get_csrf_token" | "get_credentials" => {
+            resources
+                .tickets
+                .execute(request, identity.qq_id(), packets, pushes, context)
+                .await
+        }
         "get_friend_list" => directory::friend_list(packets, pushes, friends, context).await,
         "get_stranger_info" => {
             stranger_info(

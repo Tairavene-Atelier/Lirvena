@@ -73,7 +73,28 @@ pub fn encode_oidb_request(
     reserved: i32,
 ) -> Result<Vec<u8>, OidbFrameError> {
     validate_command_and_body(command, body)?;
-    Ok(OidbWire {
+    if body.is_empty() {
+        return Err(OidbFrameError);
+    }
+    Ok(encode_request(command, subcommand, body, reserved))
+}
+
+/// Encodes an OIDB request whose documented inner message is empty.
+///
+/// # Errors
+///
+/// Returns an error for a zero command.
+pub fn encode_empty_oidb_request(
+    command: u32,
+    subcommand: u32,
+    reserved: i32,
+) -> Result<Vec<u8>, OidbFrameError> {
+    validate_command_and_body(command, &[])?;
+    Ok(encode_request(command, subcommand, &[], reserved))
+}
+
+fn encode_request(command: u32, subcommand: u32, body: &[u8], reserved: i32) -> Vec<u8> {
+    OidbWire {
         command,
         subcommand,
         error_code: 0,
@@ -81,7 +102,7 @@ pub fn encode_oidb_request(
         error_message: String::new(),
         reserved,
     }
-    .encode_to_vec())
+    .encode_to_vec()
 }
 
 /// Decodes and validates one generic OIDB request.
@@ -130,7 +151,7 @@ fn decode(input: &[u8]) -> Result<OidbWire, OidbFrameError> {
 }
 
 fn validate_command_and_body(command: u32, body: &[u8]) -> Result<(), OidbFrameError> {
-    if command == 0 || body.is_empty() || body.len() > MAX_OIDB_BODY_BYTES {
+    if command == 0 || body.len() > MAX_OIDB_BODY_BYTES {
         Err(OidbFrameError)
     } else {
         Ok(())

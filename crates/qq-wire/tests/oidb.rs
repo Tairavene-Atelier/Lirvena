@@ -1,7 +1,9 @@
 //! Shared bounded OIDB envelope contracts.
 
 use prost::Message;
-use qq_wire::{decode_oidb_request, decode_oidb_response, encode_oidb_request};
+use qq_wire::{
+    decode_oidb_request, decode_oidb_response, encode_empty_oidb_request, encode_oidb_request,
+};
 
 #[test]
 fn shared_oidb_request_is_bounded_and_canonical() -> Result<(), Box<dyn std::error::Error>> {
@@ -13,6 +15,17 @@ fn shared_oidb_request_is_bounded_and_canonical() -> Result<(), Box<dyn std::err
     assert_eq!(decoded.reserved(), 0);
     assert!(encode_oidb_request(0, 1, &[1], 0).is_err());
     assert!(encode_oidb_request(1, 1, &[], 0).is_err());
+    Ok(())
+}
+
+#[test]
+fn documented_empty_oidb_request_reuses_the_shared_envelope()
+-> Result<(), Box<dyn std::error::Error>> {
+    let encoded = encode_empty_oidb_request(0x102a, 1, 0)?;
+    let decoded = decode_oidb_request(&encoded)?;
+    assert_eq!((decoded.command(), decoded.subcommand()), (0x102a, 1));
+    assert!(decoded.body().is_empty());
+    assert!(encode_empty_oidb_request(0, 1, 0).is_err());
     Ok(())
 }
 
