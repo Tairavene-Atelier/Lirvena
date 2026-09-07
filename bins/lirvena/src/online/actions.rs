@@ -84,6 +84,18 @@ pub(super) async fn execute_account_action(
             super::group_bot::execute(request, packets, pushes, context).await
         }
         "get_ai_characters" => super::ai_voice::characters(request, packets, pushes, context).await,
+        "get_ai_record" => super::ai_voice::record_url(request, packets, pushes, context).await,
+        "send_group_ai_record" => {
+            super::ai_voice::send_record(
+                request,
+                identity,
+                packets,
+                pushes,
+                resources.messages,
+                context,
+            )
+            .await
+        }
         "get_friend_list" => directory::friend_list(packets, pushes, friends, context).await,
         "get_stranger_info" => {
             stranger_info(

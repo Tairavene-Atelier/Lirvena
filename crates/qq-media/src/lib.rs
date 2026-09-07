@@ -29,8 +29,9 @@ pub use image::{
 };
 pub use object::{MediaObject, MediaSourceKind};
 pub use record::{
-    PreparedRecord, RecordDescriptor, RecordFormat, RecordMetadataRequest,
-    encode_record_metadata_request, parse_record_metadata_response, prepare_record,
+    PreparedRecord, RecordDescriptor, RecordDownloadRequest, RecordFormat, RecordMetadataRequest,
+    encode_group_record_download_request, encode_record_metadata_request,
+    parse_group_record_download_response, parse_record_metadata_response, prepare_record,
 };
 pub use reference::MediaReference;
 pub use resolver::{MediaPolicy, MediaResolver, RemoteMediaPolicy};
