@@ -213,6 +213,57 @@ fn modern_standard_and_animated_faces_use_distinct_common_elements()
 }
 
 #[test]
+fn markdown_and_keyboard_use_bounded_structured_common_elements()
+-> Result<(), Box<dyn std::error::Error>> {
+    let keyboard = r#"{"rows":[{"buttons":[{"id":"confirm","render_data":{"label":"Confirm","visited_label":"Done","style":1},"action":{"type":2,"permission":{"type":2,"specify_user_ids":["42"]},"data":"yes","reply":true}}]}]}"#;
+    let encoded = encode_message(&SendMessageInput {
+        target: SendTextTarget::Group { group_code: 7 },
+        segments: &[
+            OutboundSegment::Markdown("**hello**"),
+            OutboundSegment::Keyboard(keyboard),
+        ],
+        client_sequence: 8,
+        random: 9,
+        unix_seconds: 10,
+    })?;
+    let elements = TestMessage::decode(encoded.as_slice())?
+        .body
+        .and_then(|body| body.rich_text)
+        .ok_or("missing rich text")?
+        .elements;
+    let markdown = elements[0].common.as_ref().ok_or("markdown")?;
+    assert_eq!((markdown.service_type, markdown.business_type), (45, 1));
+    assert_eq!(
+        TestMarkdown::decode(markdown.protobuf.as_slice())?.content,
+        "**hello**"
+    );
+    let keyboard = elements[1].common.as_ref().ok_or("keyboard")?;
+    assert_eq!((keyboard.service_type, keyboard.business_type), (46, 1));
+    let keyboard = TestKeyboardEnvelope::decode(keyboard.protobuf.as_slice())?
+        .keyboard
+        .ok_or("keyboard body")?;
+    assert_eq!(keyboard.rows.len(), 1);
+    assert_eq!(keyboard.rows[0].buttons[0].id, "confirm");
+    Ok(())
+}
+
+#[test]
+fn malformed_or_unbounded_structured_segments_fail_closed() {
+    let encode = |segment| {
+        encode_message(&SendMessageInput {
+            target: SendTextTarget::Group { group_code: 7 },
+            segments: &[segment],
+            client_sequence: 8,
+            random: 9,
+            unix_seconds: 10,
+        })
+    };
+    assert!(encode(OutboundSegment::Markdown("")).is_err());
+    assert!(encode(OutboundSegment::Keyboard("{}")).is_err());
+    assert!(encode(OutboundSegment::Keyboard("not-json")).is_err());
+}
+
+#[test]
 fn image_uses_legacy_then_modern_elements_without_reencoding()
 -> Result<(), Box<dyn std::error::Error>> {
     let segments = [OutboundSegment::Image {
@@ -616,6 +667,36 @@ struct TestAnimatedFace {
     sticker: String,
     #[prost(int32, tag = "3")]
     face: i32,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestMarkdown {
+    #[prost(string, tag = "1")]
+    content: String,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestKeyboardEnvelope {
+    #[prost(message, optional, tag = "1")]
+    keyboard: Option<TestKeyboard>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestKeyboard {
+    #[prost(message, repeated, tag = "1")]
+    rows: Vec<TestKeyboardRow>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestKeyboardRow {
+    #[prost(message, repeated, tag = "1")]
+    buttons: Vec<TestKeyboardButton>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestKeyboardButton {
+    #[prost(string, tag = "1")]
+    id: String,
 }
 
 #[derive(Clone, PartialEq, Message)]

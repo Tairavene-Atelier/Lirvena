@@ -3,6 +3,7 @@ use prost::Message;
 use crate::MessageDecodeError;
 
 mod private_file;
+mod structured;
 
 pub use private_file::{
     PrivateFileMessageInput, encode_private_file_message, validate_private_file_message_response,
@@ -69,6 +70,10 @@ pub enum OutboundSegment<'a> {
     Face(u16),
     /// One animated QQ face identifier encoded through the large-face common element.
     AnimatedFace(u16),
+    /// Markdown content carried by QQ's structured common element.
+    Markdown(&'a str),
+    /// Canonical `OneBot` keyboard JSON carried by QQ's structured common element.
+    Keyboard(&'a str),
     /// One QQ marketplace face using caller-supplied authenticated material.
     MarketFace {
         /// Hexadecimal marketplace emoji identifier.
@@ -380,6 +385,16 @@ fn compile_elements(
             }
             OutboundSegment::Face(id) => Ok(vec![face_element(*id)]),
             OutboundSegment::AnimatedFace(id) if *id >= 260 => Ok(vec![animated_face_element(*id)]),
+            OutboundSegment::Markdown(content) => Ok(vec![common_element(
+                45,
+                1,
+                structured::encode_markdown(content)?,
+            )]),
+            OutboundSegment::Keyboard(content) => Ok(vec![common_element(
+                46,
+                1,
+                structured::encode_keyboard(content)?,
+            )]),
             OutboundSegment::MarketFace {
                 emoji_id,
                 package_id,

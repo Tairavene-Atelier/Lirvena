@@ -1613,6 +1613,7 @@ dependencies = [
  "hex",
  "prost",
  "quick-xml",
+ "serde",
  "serde_json",
  "sha2",
 ]

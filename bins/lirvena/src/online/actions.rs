@@ -447,6 +447,11 @@ pub(super) enum CompiledSegment {
     },
     Face(u16),
     AnimatedFace(u16),
+    Markdown(String),
+    Keyboard {
+        wire: String,
+        content: Value,
+    },
     MarketFace {
         emoji_id: String,
         package_id: i32,
@@ -502,6 +507,8 @@ impl CompiledSegment {
             },
             Self::Face(value) => OutboundSegment::Face(*value),
             Self::AnimatedFace(value) => OutboundSegment::AnimatedFace(*value),
+            Self::Markdown(value) => OutboundSegment::Markdown(value),
+            Self::Keyboard { wire, .. } => OutboundSegment::Keyboard(wire),
             Self::MarketFace {
                 emoji_id,
                 package_id,
@@ -569,6 +576,8 @@ impl CompiledSegment {
             Self::MentionEveryone { display } | Self::Mention { display, .. } => display,
             Self::Face(_) => "[表情]",
             Self::AnimatedFace(_) => "[动画表情]",
+            Self::Markdown(_) => "[Markdown]",
+            Self::Keyboard { .. } => "[Keyboard]",
             Self::MarketFace { summary, .. } => summary,
             Self::Image { .. } => "[图片]",
             Self::Record { .. } => "[语音]",
@@ -590,6 +599,10 @@ impl CompiledSegment {
             Self::AnimatedFace(359) => json!({"type": "rps", "data": {}}),
             Self::Face(value) | Self::AnimatedFace(value) => {
                 json!({"type": "face", "data": {"id": value}})
+            }
+            Self::Markdown(content) => json!({"type": "markdown", "data": {"content": content}}),
+            Self::Keyboard { content, .. } => {
+                json!({"type": "keyboard", "data": {"content": content}})
             }
             Self::MarketFace {
                 emoji_id,
@@ -743,6 +756,25 @@ async fn compile_segment(
             .ok_or(AccountActionError::BadParameters),
         "dice" => Ok(CompiledSegment::AnimatedFace(358)),
         "rps" => Ok(CompiledSegment::AnimatedFace(359)),
+        "markdown" => segment
+            .data()
+            .get("content")
+            .and_then(Value::as_str)
+            .map(|value| CompiledSegment::Markdown(value.to_owned()))
+            .ok_or(AccountActionError::BadParameters),
+        "keyboard" => {
+            let keyboard_content = segment
+                .data()
+                .get("content")
+                .cloned()
+                .ok_or(AccountActionError::BadParameters)?;
+            let wire = serde_json::to_string(&keyboard_content)
+                .map_err(|_error| AccountActionError::BadParameters)?;
+            Ok(CompiledSegment::Keyboard {
+                wire,
+                content: keyboard_content,
+            })
+        }
         "mface" => compile_market_face(segment),
         "at" if matches!(target, SendTextTarget::Group { .. }) => {
             let target = segment
