@@ -153,35 +153,45 @@ pub(super) async fn resolve_group_recall(
     .ok()
 }
 
+pub(super) struct FriendRecallResolution<'a, 'context> {
+    pub(super) identity: &'a AccountIdentity,
+    pub(super) self_uid: &'a str,
+    pub(super) packets: &'a PacketRuntime,
+    pub(super) pushes: &'a PushRuntime,
+    pub(super) friends: &'a mut std::collections::BTreeMap<u32, FriendEntry>,
+    pub(super) message_id: u32,
+    pub(super) occurred_at: u64,
+    pub(super) context: &'a mut OnlineContext<'context>,
+}
+
 pub(super) async fn resolve_friend_recall(
-    identity: &AccountIdentity,
-    self_uid: &str,
-    packets: &PacketRuntime,
-    pushes: &PushRuntime,
-    friends: &mut std::collections::BTreeMap<u32, FriendEntry>,
-    message_id: u32,
+    resolution: FriendRecallResolution<'_, '_>,
     recall: FriendRecall,
-    occurred_at: u64,
-    context: &mut OnlineContext<'_>,
 ) -> Option<ResolvedFriendRecall> {
-    if message_id == 0 {
+    if resolution.message_id == 0 {
         return None;
     }
-    let user_id = if recall.from_uid() == self_uid {
-        identity.qq_id()
+    let user_id = if recall.from_uid() == resolution.self_uid {
+        resolution.identity.qq_id()
     } else {
         u64::from(
-            directory::friend_uin_by_uid(recall.from_uid(), packets, pushes, friends, context)
-                .await
-                .ok()?,
+            directory::friend_uin_by_uid(
+                recall.from_uid(),
+                resolution.packets,
+                resolution.pushes,
+                resolution.friends,
+                resolution.context,
+            )
+            .await
+            .ok()?,
         )
     };
     ResolvedFriendRecall::new(
-        identity.clone(),
+        resolution.identity.clone(),
         user_id,
-        message_id,
+        resolution.message_id,
         recall.tip().to_owned(),
-        occurred_at,
+        resolution.occurred_at,
     )
     .ok()
 }

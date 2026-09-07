@@ -373,15 +373,17 @@ impl OnlineRuntime {
                         .flatten()
                         .unwrap_or_default();
                     match notices::resolve_friend_recall(
-                        &self.identity,
-                        context.credential.uid(),
-                        &self.packets,
-                        &self.pushes,
-                        &mut self.friends,
-                        message_id,
+                        notices::FriendRecallResolution {
+                            identity: &self.identity,
+                            self_uid: context.credential.uid(),
+                            packets: &self.packets,
+                            pushes: &self.pushes,
+                            friends: &mut self.friends,
+                            message_id,
+                            occurred_at,
+                            context,
+                        },
                         recall,
-                        occurred_at,
-                        context,
                     )
                     .await
                     {
