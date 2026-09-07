@@ -1,8 +1,11 @@
 use account_api::{
-    AccountIdentity, ResolvedGroupMute, ResolvedGroupNotice, ResolvedGroupNoticeKind,
-    ResolvedGroupReaction, ResolvedGroupRecall,
+    AccountIdentity, ResolvedFriendRecall, ResolvedGroupMute, ResolvedGroupNotice,
+    ResolvedGroupNoticeKind, ResolvedGroupReaction, ResolvedGroupRecall,
 };
-use qq_message::{GroupMute, GroupNotice, GroupReaction, GroupRecall, MemberDecreaseKind};
+use qq_directory::FriendEntry;
+use qq_message::{
+    FriendRecall, GroupMute, GroupNotice, GroupReaction, GroupRecall, MemberDecreaseKind,
+};
 
 use super::{
     directory, message_registry::MessageRegistry, packets::PacketRuntime, push::PushRuntime,
@@ -146,6 +149,49 @@ pub(super) async fn resolve_group_recall(
         message_id,
         recall.tip().to_owned(),
         occurred_at,
+    )
+    .ok()
+}
+
+pub(super) struct FriendRecallResolution<'a, 'context> {
+    pub(super) identity: &'a AccountIdentity,
+    pub(super) self_uid: &'a str,
+    pub(super) packets: &'a PacketRuntime,
+    pub(super) pushes: &'a PushRuntime,
+    pub(super) friends: &'a mut std::collections::BTreeMap<u32, FriendEntry>,
+    pub(super) message_id: u32,
+    pub(super) occurred_at: u64,
+    pub(super) context: &'a mut OnlineContext<'context>,
+}
+
+pub(super) async fn resolve_friend_recall(
+    resolution: FriendRecallResolution<'_, '_>,
+    recall: FriendRecall,
+) -> Option<ResolvedFriendRecall> {
+    if resolution.message_id == 0 {
+        return None;
+    }
+    let user_id = if recall.from_uid() == resolution.self_uid {
+        resolution.identity.qq_id()
+    } else {
+        u64::from(
+            directory::friend_uin_by_uid(
+                recall.from_uid(),
+                resolution.packets,
+                resolution.pushes,
+                resolution.friends,
+                resolution.context,
+            )
+            .await
+            .ok()?,
+        )
+    };
+    ResolvedFriendRecall::new(
+        resolution.identity.clone(),
+        user_id,
+        resolution.message_id,
+        recall.tip().to_owned(),
+        resolution.occurred_at,
     )
     .ok()
 }

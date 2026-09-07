@@ -204,6 +204,17 @@ impl MessageRegistry {
             .map(|record| record.map(|record| record.message_id()))
     }
 
+    pub(super) fn find_private_recall_message_id(
+        &self,
+        client_sequence: u64,
+        random: u32,
+        timestamp: u32,
+    ) -> Result<Option<u32>, MessageStoreError> {
+        self.store
+            .find_private_recall(client_sequence, random, timestamp)
+            .map(|record| record.map(|record| record.message_id()))
+    }
+
     pub(super) fn remove(&mut self, message_id: u32) -> Result<(), MessageStoreError> {
         self.store.remove(message_id)
     }

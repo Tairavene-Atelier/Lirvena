@@ -90,6 +90,24 @@ pub(super) async fn friend_uid(
         .ok_or(AccountActionError::QqFailure)
 }
 
+pub(super) async fn friend_uin_by_uid(
+    uid: &str,
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    friends: &mut BTreeMap<u32, FriendEntry>,
+    context: &mut OnlineContext<'_>,
+) -> Result<u32, AccountActionError> {
+    if let Some(friend) = friends.values().find(|friend| friend.uid == uid) {
+        return Ok(friend.uin);
+    }
+    refresh_friends(packets, pushes, friends, context).await?;
+    friends
+        .values()
+        .find(|friend| friend.uid == uid)
+        .map(|friend| friend.uin)
+        .ok_or(AccountActionError::QqFailure)
+}
+
 pub(super) async fn group_list(
     packets: &PacketRuntime,
     pushes: &PushRuntime,

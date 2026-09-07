@@ -2,8 +2,9 @@
 
 use account_api::{
     AccountEvent, AccountIdentity, FriendRequestReference, GroupRequestKind, GroupRequestReference,
-    InboundMessage, ResolvedFriendRequest, ResolvedGroupMute, ResolvedGroupNotice,
-    ResolvedGroupNoticeKind, ResolvedGroupReaction, ResolvedGroupRecall, ResolvedGroupRequest,
+    InboundMessage, ResolvedFriendRecall, ResolvedFriendRequest, ResolvedGroupMute,
+    ResolvedGroupNotice, ResolvedGroupNoticeKind, ResolvedGroupReaction, ResolvedGroupRecall,
+    ResolvedGroupRequest,
 };
 use account_runtime::AccountLocalId;
 use adapter_onebot::{IdFormat, project_account_event, project_message_record};
@@ -487,6 +488,30 @@ fn group_recall_uses_retained_message_id() -> TestResult {
             "group_id": "88",
             "user_id": "42",
             "operator_id": "7",
+            "message_id": "91",
+            "tip": "recalled"
+        })
+    );
+    Ok(())
+}
+
+#[test]
+fn friend_recall_uses_retained_message_id() -> TestResult {
+    let event = AccountEvent::FriendRecall(Box::new(ResolvedFriendRecall::new(
+        identity()?,
+        42,
+        91,
+        "recalled".to_owned(),
+        1_800_000_000,
+    )?));
+    assert_eq!(
+        project_account_event(&event, IdFormat::String)?.ok_or("missing recall")?,
+        json!({
+            "time": 1_800_000_000,
+            "self_id": "10001",
+            "post_type": "notice",
+            "notice_type": "friend_recall",
+            "user_id": "42",
             "message_id": "91",
             "tip": "recalled"
         })

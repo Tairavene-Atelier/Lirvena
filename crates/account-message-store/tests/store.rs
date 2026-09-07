@@ -177,6 +177,7 @@ fn private_lookup_requires_one_complete_unique_correlation() -> TestResult {
         store.find_private("u_peer", 42, 101, 102, 103, 104)?,
         Some(first)
     );
+    assert_eq!(store.find_private_recall(102, 103, 104)?, store.get(1)?);
     assert_eq!(store.find_private("u_peer", 42, 101, 102, 103, 105)?, None);
 
     store.put(&MessageRecord::new(
@@ -191,6 +192,8 @@ fn private_lookup_requires_one_complete_unique_correlation() -> TestResult {
             .is_err()
     );
     assert!(store.find_private("", 42, 101, 102, 103, 104).is_err());
+    assert!(store.find_private_recall(102, 103, 104).is_err());
+    assert!(store.find_private_recall(0, 103, 104).is_err());
     Ok(())
 }
 

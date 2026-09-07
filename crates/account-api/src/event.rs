@@ -153,6 +153,8 @@ pub enum AccountEvent {
     GroupMute(Box<crate::ResolvedGroupMute>),
     /// One authenticated group-message recall with retained correlation.
     GroupRecall(Box<crate::ResolvedGroupRecall>),
+    /// One authenticated direct-message recall with retained correlation.
+    FriendRecall(Box<crate::ResolvedFriendRecall>),
     /// One authenticated group request with an actionable, versioned reference.
     GroupRequest(Box<crate::ResolvedGroupRequest>),
     /// One authenticated friend request with an actionable, versioned reference.

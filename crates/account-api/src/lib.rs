@@ -3,6 +3,7 @@
 
 mod action;
 mod event;
+mod friend_recall;
 mod friend_request;
 mod group;
 mod group_mute;
@@ -16,6 +17,7 @@ pub use action::{
     PendingAccountAction, account_action_channel,
 };
 pub use event::{AccountEvent, AccountIdentity, InboundMessage};
+pub use friend_recall::ResolvedFriendRecall;
 pub use friend_request::{FriendRequestReference, ResolvedFriendRequest};
 pub use group::{ResolvedGroupNotice, ResolvedGroupNoticeKind};
 pub use group_mute::ResolvedGroupMute;

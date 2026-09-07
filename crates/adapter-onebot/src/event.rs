@@ -56,6 +56,7 @@ pub fn project_account_event(
         }
         AccountEvent::GroupMute(mute) => Ok(Some(project_group_mute(mute, id_format))),
         AccountEvent::GroupRecall(recall) => Ok(Some(project_group_recall(recall, id_format))),
+        AccountEvent::FriendRecall(recall) => Ok(Some(project_friend_recall(recall, id_format))),
         AccountEvent::GroupRequest(request) => Ok(Some(project_group_request(request, id_format))),
         AccountEvent::FriendRequest(request) => {
             Ok(Some(project_friend_request(request, id_format)))
@@ -64,6 +65,18 @@ pub fn project_account_event(
             Ok(None)
         }
     }
+}
+
+fn project_friend_recall(recall: &account_api::ResolvedFriendRecall, id_format: IdFormat) -> Value {
+    json!({
+        "time": recall.occurred_at(),
+        "self_id": id_format.value(recall.account().qq_id()),
+        "post_type": "notice",
+        "notice_type": "friend_recall",
+        "user_id": id_format.value(recall.user_id()),
+        "message_id": id_format.value(u64::from(recall.message_id())),
+        "tip": recall.tip()
+    })
 }
 
 fn project_group_recall(recall: &account_api::ResolvedGroupRecall, id_format: IdFormat) -> Value {
