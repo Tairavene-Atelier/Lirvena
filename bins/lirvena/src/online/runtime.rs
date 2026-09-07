@@ -363,6 +363,36 @@ impl OnlineRuntime {
                         let _delivered = self.events.publish(AccountEvent::Poke(Box::new(poke)));
                     }
                 }
+                DecodedPush::GroupEssence {
+                    essence,
+                    occurred_at,
+                    ..
+                } => {
+                    let message_id = self
+                        .messages
+                        .find_group_message_id(essence.group_id(), u64::from(essence.sequence()))
+                        .ok()
+                        .flatten()
+                        .unwrap_or_default();
+                    match account_api::ResolvedGroupEssence::new(
+                        self.identity.clone(),
+                        u64::from(essence.group_id()),
+                        message_id,
+                        u64::from(essence.sender_id()),
+                        u64::from(essence.operator_id()),
+                        essence.is_added(),
+                        occurred_at,
+                    ) {
+                        Ok(essence) => {
+                            let _delivered = self
+                                .events
+                                .publish(AccountEvent::GroupEssence(Box::new(essence)));
+                        }
+                        Err(_error) => eprintln!(
+                            "Lirvena retained no OneBot essence change because its authenticated message correlation was unavailable"
+                        ),
+                    }
+                }
                 DecodedPush::GroupRecall {
                     recall,
                     occurred_at,

@@ -170,6 +170,7 @@ fn record_event(
         | AccountEvent::GroupMute(_)
         | AccountEvent::GroupNameChange(_)
         | AccountEvent::Poke(_)
+        | AccountEvent::GroupEssence(_)
         | AccountEvent::GroupRecall(_)
         | AccountEvent::FriendRecall(_)
         | AccountEvent::GroupRequest(_)

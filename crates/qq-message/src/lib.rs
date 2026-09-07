@@ -2,6 +2,7 @@
 
 mod decoder;
 mod error;
+mod essence;
 mod event_payload;
 mod friend_recall;
 mod friend_request;
@@ -26,6 +27,7 @@ mod rich_text;
 
 pub use decoder::{MessageDecoder, MessageDisposition};
 pub use error::MessageDecodeError;
+pub use essence::{GroupEssence, decode_group_essence};
 pub use friend_recall::{FriendRecall, decode_friend_recall};
 pub use friend_request::{FriendRequestSignal, decode_friend_request_signal};
 pub use group_mute::{GroupMute, decode_group_mute};

@@ -2,6 +2,7 @@
 //! Shared, bounded account event boundary used by every Lirvena adapter.
 
 mod action;
+mod essence;
 mod event;
 mod friend_recall;
 mod friend_request;
@@ -18,6 +19,7 @@ pub use action::{
     AccountActionError, AccountActionHandle, AccountActionReceiver, AccountActionRequest,
     PendingAccountAction, account_action_channel,
 };
+pub use essence::ResolvedGroupEssence;
 pub use event::{AccountEvent, AccountIdentity, InboundMessage};
 pub use friend_recall::ResolvedFriendRecall;
 pub use friend_request::{FriendRequestReference, ResolvedFriendRequest};

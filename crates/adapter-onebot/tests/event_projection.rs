@@ -576,6 +576,34 @@ fn friend_and_group_pokes_keep_lagrange_compatible_fields() -> TestResult {
     Ok(())
 }
 
+#[test]
+fn group_essence_uses_the_retained_message_id() -> TestResult {
+    let event = AccountEvent::GroupEssence(Box::new(account_api::ResolvedGroupEssence::new(
+        identity()?,
+        88,
+        91,
+        42,
+        7,
+        true,
+        1_800_000_000,
+    )?));
+    assert_eq!(
+        project_account_event(&event, IdFormat::String)?.ok_or("missing essence")?,
+        json!({
+            "time": 1_800_000_000,
+            "self_id": "10001",
+            "post_type": "notice",
+            "notice_type": "essence",
+            "sub_type": "add",
+            "group_id": "88",
+            "sender_id": "42",
+            "operator_id": "7",
+            "message_id": "91"
+        })
+    );
+    Ok(())
+}
+
 fn event(
     message_type: u32,
     group: Option<(u32, &str)>,

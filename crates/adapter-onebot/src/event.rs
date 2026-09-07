@@ -59,6 +59,7 @@ pub fn project_account_event(
             Ok(Some(project_group_name_change(change, id_format)))
         }
         AccountEvent::Poke(poke) => Ok(Some(project_poke(poke, id_format))),
+        AccountEvent::GroupEssence(essence) => Ok(Some(project_group_essence(essence, id_format))),
         AccountEvent::GroupRecall(recall) => Ok(Some(project_group_recall(recall, id_format))),
         AccountEvent::FriendRecall(recall) => Ok(Some(project_friend_recall(recall, id_format))),
         AccountEvent::GroupRequest(request) => Ok(Some(project_group_request(request, id_format))),
@@ -69,6 +70,23 @@ pub fn project_account_event(
             Ok(None)
         }
     }
+}
+
+fn project_group_essence(
+    essence: &account_api::ResolvedGroupEssence,
+    id_format: IdFormat,
+) -> Value {
+    json!({
+        "time": essence.occurred_at(),
+        "self_id": id_format.value(essence.account().qq_id()),
+        "post_type": "notice",
+        "notice_type": "essence",
+        "sub_type": if essence.is_added() { "add" } else { "delete" },
+        "group_id": id_format.value(essence.group_id()),
+        "sender_id": id_format.value(essence.sender_id()),
+        "operator_id": id_format.value(essence.operator_id()),
+        "message_id": id_format.value(u64::from(essence.message_id()))
+    })
 }
 
 fn project_poke(poke: &account_api::ResolvedPoke, id_format: IdFormat) -> Value {
