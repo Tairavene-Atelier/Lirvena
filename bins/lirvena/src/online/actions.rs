@@ -109,6 +109,17 @@ pub(super) async fn execute_account_action(
         }
         "get_rkey" => super::image::rkeys(packets, pushes, context).await,
         "get_msg" => get_message(request, resources.messages),
+        "get_essence_msg_list" => {
+            essence::list(
+                request,
+                identity.qq_id(),
+                packets,
+                pushes,
+                resources.tickets,
+                context,
+            )
+            .await
+        }
         "get_forward_msg" => {
             super::long_message::get_forward_message(request, packets, pushes, context).await
         }
