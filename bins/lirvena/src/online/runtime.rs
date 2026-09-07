@@ -13,6 +13,7 @@ use qq_login::{CredentialLogin, QrDevice};
 use qq_profile::{LinuxNtProfile, decode_online_plan};
 use qq_session::AuthenticatedSession;
 use tokio::net::TcpStream;
+use tokio::sync::watch;
 use tokio::time::sleep;
 
 use super::actions::{ActionResources, execute_account_action};
@@ -49,6 +50,7 @@ pub(crate) struct OnlineRuntime {
     messages: MessageRegistry,
     media: MediaRuntime,
     tickets: TicketRuntime,
+    restart: watch::Sender<bool>,
 }
 
 impl OnlineRuntime {
@@ -58,6 +60,7 @@ impl OnlineRuntime {
         identity: AccountIdentity,
         events: AccountEventPublisher,
         state_directory: &Path,
+        restart: watch::Sender<bool>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let messages = MessageRegistry::open(state_directory, identity.local_id())?;
         Ok(Self {
@@ -71,6 +74,7 @@ impl OnlineRuntime {
             messages,
             media: MediaRuntime::new(state_directory)?,
             tickets: TicketRuntime::new()?,
+            restart,
         })
     }
 
@@ -220,6 +224,7 @@ impl OnlineRuntime {
                             messages: &mut self.messages,
                             media: &mut self.media,
                             tickets: &mut self.tickets,
+                            restart: &self.restart,
                         },
                         &mut context,
                     ).await;

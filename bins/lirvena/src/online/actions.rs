@@ -8,6 +8,7 @@ use qq_message::{
     OutboundSegment, SendMessageInput, SendTextTarget, encode_message, parse_send_message_response,
 };
 use serde_json::{Value, json};
+use tokio::sync::watch;
 
 use super::controls;
 use super::directory;
@@ -29,6 +30,7 @@ pub(super) struct ActionResources<'a> {
     pub(super) messages: &'a mut MessageRegistry,
     pub(super) media: &'a mut MediaRuntime,
     pub(super) tickets: &'a mut TicketRuntime,
+    pub(super) restart: &'a watch::Sender<bool>,
 }
 
 pub(super) async fn execute_account_action(
@@ -286,8 +288,16 @@ pub(super) async fn execute_account_action(
             friends.clear();
             Ok(json!({}))
         }
+        "set_restart" => request_restart(resources.restart),
         _ => Err(AccountActionError::ActionNotFound),
     }
+}
+
+fn request_restart(sender: &watch::Sender<bool>) -> Result<Value, AccountActionError> {
+    sender
+        .send(true)
+        .map_err(|_error| AccountActionError::QqFailure)?;
+    Ok(json!({}))
 }
 
 async fn send_message(
@@ -1108,8 +1118,21 @@ mod tests {
     use adapter_onebot::parse_message;
     use qq_message::{OutboundSegment, SendTextTarget};
     use serde_json::json;
+    use tokio::sync::watch;
 
-    use super::{CompiledSegment, compile_market_face, quote_scope_matches, segment_coordinate};
+    use super::{
+        CompiledSegment, compile_market_face, quote_scope_matches, request_restart,
+        segment_coordinate,
+    };
+
+    #[test]
+    fn restart_action_sets_the_installation_coordinator() {
+        let (sender, receiver) = watch::channel(false);
+        assert_eq!(request_restart(&sender), Ok(json!({})));
+        assert!(*receiver.borrow());
+        drop(receiver);
+        assert!(request_restart(&sender).is_err());
+    }
 
     #[test]
     fn location_coordinates_accept_onebot_number_or_string_and_are_normalized() {

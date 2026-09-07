@@ -42,12 +42,20 @@ enum StopDirective {
     Protective(ProtectiveReason),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum DaemonOutcome {
+    Stopped,
+    Restart,
+}
+
 struct AccountCompletion {
     local_id: AccountLocalId,
     result: Result<(), io::Error>,
 }
 
-pub(super) async fn run(config: ProcessConfig) -> Result<(), Box<dyn std::error::Error>> {
+pub(super) async fn run(
+    config: ProcessConfig,
+) -> Result<DaemonOutcome, Box<dyn std::error::Error>> {
     let account_events = AccountEventHub::new(EVENT_QUEUE_CAPACITY)?;
     let event_publisher = account_events.publisher();
     let notification_center = notification::start(&config.state_directory).await?;
@@ -78,6 +86,7 @@ pub(super) async fn run(config: ProcessConfig) -> Result<(), Box<dyn std::error:
     let mut jobs = JoinSet::new();
     let mut stop_channels = BTreeMap::new();
     let mut action_channels = BTreeMap::new();
+    let (restart_sender, mut restart_receiver) = watch::channel(false);
 
     for account_config in &config.accounts {
         let local_id = AccountLocalId::from_bytes(account_config.account_slot_id);
@@ -129,6 +138,7 @@ pub(super) async fn run(config: ProcessConfig) -> Result<(), Box<dyn std::error:
             stop: stop_receiver,
             _action_handle: action_handle,
             actions: action_receiver,
+            restart: restart_sender.clone(),
         }));
     }
 
@@ -138,6 +148,7 @@ pub(super) async fn run(config: ProcessConfig) -> Result<(), Box<dyn std::error:
         &grant_plan,
         &stop_channels,
         notification_handle.as_ref(),
+        &mut restart_receiver,
     )
     .await;
     if let Some(watch) = watch_runtime
@@ -164,7 +175,11 @@ pub(super) async fn run(config: ProcessConfig) -> Result<(), Box<dyn std::error:
     {
         first_error.get_or_insert_with(|| io::Error::other(error.to_string()));
     }
-    first_error.map_or(Ok(()), |error| Err(error.into()))
+    match first_error {
+        Some(error) => Err(error.into()),
+        None if *restart_receiver.borrow() => Ok(DaemonOutcome::Restart),
+        None => Ok(DaemonOutcome::Stopped),
+    }
 }
 
 fn start_community_telemetry(
@@ -220,6 +235,7 @@ struct AccountTaskContext {
     stop: watch::Receiver<StopDirective>,
     _action_handle: AccountActionHandle,
     actions: AccountActionReceiver,
+    restart: watch::Sender<bool>,
 }
 
 async fn run_account(context: AccountTaskContext) -> AccountCompletion {
@@ -235,6 +251,7 @@ async fn run_account(context: AccountTaskContext) -> AccountCompletion {
         mut stop,
         _action_handle,
         actions,
+        restart,
     } = context;
     let local_id = account.local_id();
     let outcome = tokio::select! {
@@ -247,6 +264,7 @@ async fn run_account(context: AccountTaskContext) -> AccountCompletion {
                 realm,
                 account: &account,
                 events: &events,
+                restart,
             },
             actions,
         ) => {
@@ -290,6 +308,7 @@ async fn supervise(
     plan: &GrantPlan,
     stop_channels: &BTreeMap<AccountLocalId, watch::Sender<StopDirective>>,
     notifications: Option<&NotificationHandle>,
+    restart: &mut watch::Receiver<bool>,
 ) -> Option<io::Error> {
     let mut first_error = None;
     while !jobs.is_empty() {
@@ -327,6 +346,15 @@ async fn supervise(
                 }
                 for sender in stop_channels.values() {
                     let _changed = sender.send(StopDirective::Graceful);
+                }
+            }
+            changed = restart.changed(), if !*restart.borrow() => {
+                if changed.is_err() {
+                    first_error.get_or_insert_with(|| io::Error::other("restart coordinator ended"));
+                } else if *restart.borrow() {
+                    for sender in stop_channels.values() {
+                        let _changed = sender.send(StopDirective::Graceful);
+                    }
                 }
             }
         }
