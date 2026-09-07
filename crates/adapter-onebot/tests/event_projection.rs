@@ -3,7 +3,7 @@
 use account_api::{
     AccountEvent, AccountIdentity, FriendRequestReference, GroupRequestKind, GroupRequestReference,
     InboundMessage, ResolvedFriendRequest, ResolvedGroupMute, ResolvedGroupNotice,
-    ResolvedGroupNoticeKind, ResolvedGroupReaction, ResolvedGroupRequest,
+    ResolvedGroupNoticeKind, ResolvedGroupReaction, ResolvedGroupRecall, ResolvedGroupRequest,
 };
 use account_runtime::AccountLocalId;
 use adapter_onebot::{IdFormat, project_account_event, project_message_record};
@@ -461,6 +461,34 @@ fn group_mute_projects_member_and_whole_group_shapes() -> TestResult {
             "operator_id": 0,
             "user_id": 0,
             "duration": -1
+        })
+    );
+    Ok(())
+}
+
+#[test]
+fn group_recall_uses_retained_message_id() -> TestResult {
+    let event = AccountEvent::GroupRecall(Box::new(ResolvedGroupRecall::new(
+        identity()?,
+        88,
+        42,
+        7,
+        91,
+        "recalled".to_owned(),
+        1_800_000_000,
+    )?));
+    assert_eq!(
+        project_account_event(&event, IdFormat::String)?.ok_or("missing recall")?,
+        json!({
+            "time": 1_800_000_000,
+            "self_id": "10001",
+            "post_type": "notice",
+            "notice_type": "group_recall",
+            "group_id": "88",
+            "user_id": "42",
+            "operator_id": "7",
+            "message_id": "91",
+            "tip": "recalled"
         })
     );
     Ok(())
