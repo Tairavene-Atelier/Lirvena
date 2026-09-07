@@ -72,7 +72,10 @@ Lagrange 兼容的临时 HTTP 地址；Lirvena 只返回该地址而不会代替
 协商、必要的 Highway 95 上传及最终签名消息三步都成功后才返回成功；fast-upload 不会重复传输。
 `upload_group_file` 复用统一媒体解析与 Highway 会话，支持 QQ fast-upload，并只在 Ceylith
 签名的最终提交得到 QQ 确认后返回成功。
-完整 OneBot 和生产部署尚未完成，因此当前版本仍不能声称已经登录或稳定在线。
+冻结基线中的标准 OneBot 11 action、消息段和业务 notice 已接入；唯一刻意不提供的是可绕过
+Account API 与安全边界的原始 `.send_packet`。扩展 action 与普通 OneBot 调用不设功能白名单，
+但仍必须由实际 QQ 响应确认成功。Ceylith 加密协商、签名 Profile 和真实 QQ 二维码门禁已经
+通过；扫码后的登录、初始同步、持续在线和生产部署仍待实机验收，因此当前版本不声称已稳定在线。
 
 账号授权模式固定为 `public`、`require_grant` 和 `allow_public_fallback`。缺少授权时，
 `require_grant` 拒绝启动，`allow_public_fallback` 仅能在启动阶段发出强警告后进入 Public；
