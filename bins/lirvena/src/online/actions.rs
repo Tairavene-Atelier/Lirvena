@@ -80,6 +80,9 @@ pub(super) async fn execute_account_action(
             )
             .await
         }
+        "set_group_bot_status" | "send_group_bot_callback" => {
+            super::group_bot::execute(request, packets, pushes, context).await
+        }
         "get_friend_list" => directory::friend_list(packets, pushes, friends, context).await,
         "get_stranger_info" => {
             stranger_info(
