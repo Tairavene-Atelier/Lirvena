@@ -4,7 +4,10 @@ use account_api::{
 };
 use qq_message::{GroupMute, GroupNotice, GroupReaction, GroupRecall, MemberDecreaseKind};
 
-use super::{directory, packets::PacketRuntime, push::PushRuntime, runtime::OnlineContext};
+use super::{
+    directory, message_registry::MessageRegistry, packets::PacketRuntime, push::PushRuntime,
+    runtime::OnlineContext,
+};
 
 pub(super) async fn resolve_group_reaction(
     identity: &AccountIdentity,
