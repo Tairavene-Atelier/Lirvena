@@ -3,7 +3,7 @@
 use prost::Message;
 use qq_message::{
     GroupNotice, MemberDecreaseKind, MemberIncreaseKind, MessageDecoder, MessageDisposition,
-    decode_group_notice,
+    decode_group_mute, decode_group_notice,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -30,6 +30,8 @@ struct Response {
 struct Content {
     #[prost(uint32, tag = "1")]
     message_type: u32,
+    #[prost(uint32, tag = "2")]
+    sub_type: u32,
     #[prost(uint64, optional, tag = "5")]
     sequence: Option<u64>,
 }
@@ -74,6 +76,30 @@ struct AdministratorBody {
 struct AdministratorMember {
     #[prost(string, tag = "1")]
     uid: String,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct Mute {
+    #[prost(uint32, tag = "1")]
+    group_id: u32,
+    #[prost(string, optional, tag = "4")]
+    operator_uid: Option<String>,
+    #[prost(message, optional, tag = "5")]
+    data: Option<MuteData>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct MuteData {
+    #[prost(message, optional, tag = "3")]
+    state: Option<MuteState>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct MuteState {
+    #[prost(string, optional, tag = "1")]
+    target_uid: Option<String>,
+    #[prost(uint32, tag = "2")]
+    duration: u32,
 }
 
 #[test]
@@ -173,6 +199,52 @@ fn decrease_subtypes_and_nested_operator_are_strict() -> TestResult {
     Ok(())
 }
 
+#[test]
+fn group_and_member_mutes_preserve_scope() -> TestResult {
+    let member = envelope_with_subtype(
+        732,
+        12,
+        Mute {
+            group_id: 88,
+            operator_uid: Some("u_operator".to_owned()),
+            data: Some(MuteData {
+                state: Some(MuteState {
+                    target_uid: Some("u_target".to_owned()),
+                    duration: 600,
+                }),
+            }),
+        }
+        .encode_to_vec(),
+    )?;
+    let decoded = decode_group_mute(&member)?.ok_or("missing member mute")?;
+    assert_eq!(decoded.group_id(), 88);
+    assert_eq!(decoded.operator_uid(), Some("u_operator"));
+    assert_eq!(decoded.target_uid(), Some("u_target"));
+    assert_eq!(decoded.duration(), 600);
+
+    let whole = envelope_with_subtype(
+        732,
+        12,
+        Mute {
+            group_id: 88,
+            operator_uid: None,
+            data: Some(MuteData {
+                state: Some(MuteState {
+                    target_uid: None,
+                    duration: u32::MAX,
+                }),
+            }),
+        }
+        .encode_to_vec(),
+    )?;
+    let decoded = decode_group_mute(&whole)?.ok_or("missing group mute")?;
+    assert_eq!(decoded.group_id(), 88);
+    assert_eq!(decoded.operator_uid(), None);
+    assert_eq!(decoded.target_uid(), None);
+    assert_eq!(decoded.duration(), u32::MAX);
+    Ok(())
+}
+
 fn envelope(
     message_type: u32,
     notice: Vec<u8>,
@@ -184,6 +256,33 @@ fn envelope(
         }),
         content: Some(Content {
             message_type,
+            sub_type: 0,
+            sequence: Some(7),
+        }),
+        body: Some(Body {
+            content: Some(notice),
+        }),
+    };
+    let mut decoder = MessageDecoder::default();
+    let MessageDisposition::New(envelope) = decoder.decode_embedded(&body.encode_to_vec())? else {
+        return Err("expected new notice".into());
+    };
+    Ok(*envelope)
+}
+
+fn envelope_with_subtype(
+    message_type: u32,
+    sub_type: u32,
+    notice: Vec<u8>,
+) -> Result<qq_message::MessageEnvelope, Box<dyn std::error::Error>> {
+    let body = PushBody {
+        response: Some(Response {
+            from_uin: 1,
+            to_uin: 2,
+        }),
+        content: Some(Content {
+            message_type,
+            sub_type,
             sequence: Some(7),
         }),
         body: Some(Body {

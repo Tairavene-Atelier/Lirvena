@@ -1,7 +1,8 @@
 use account_api::{
-    AccountIdentity, ResolvedGroupNotice, ResolvedGroupNoticeKind, ResolvedGroupReaction,
+    AccountIdentity, ResolvedGroupMute, ResolvedGroupNotice, ResolvedGroupNoticeKind,
+    ResolvedGroupReaction,
 };
-use qq_message::{GroupNotice, GroupReaction, MemberDecreaseKind};
+use qq_message::{GroupMute, GroupNotice, GroupReaction, MemberDecreaseKind};
 
 use super::{
     directory, message_registry::MessageRegistry, packets::PacketRuntime, push::PushRuntime,
@@ -75,6 +76,44 @@ pub(super) async fn resolve_group_notice(
         user_id,
         resolved_operator,
         kind,
+        occurred_at,
+    )
+    .ok()
+}
+
+pub(super) async fn resolve_group_mute(
+    identity: &AccountIdentity,
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    mute: GroupMute,
+    occurred_at: u64,
+    context: &mut OnlineContext<'_>,
+) -> Option<ResolvedGroupMute> {
+    let needs_members = mute.operator_uid().and_then(parse_uid).is_none()
+        || mute
+            .target_uid()
+            .is_some_and(|uid| parse_uid(uid).is_none());
+    let members = if needs_members {
+        directory::group_members(mute.group_id(), packets, pushes, context)
+            .await
+            .ok()
+    } else {
+        None
+    };
+    let operator_id = match mute.operator_uid() {
+        Some(uid) => Some(resolve_uid(uid, members.as_deref())?),
+        None => None,
+    };
+    let target_id = match mute.target_uid() {
+        Some(uid) => Some(resolve_uid(uid, members.as_deref())?),
+        None => None,
+    };
+    ResolvedGroupMute::new(
+        identity.clone(),
+        u64::from(mute.group_id()),
+        operator_id,
+        target_id,
+        mute.duration(),
         occurred_at,
     )
     .ok()

@@ -54,6 +54,7 @@ pub fn project_account_event(
         AccountEvent::GroupReaction(reaction) => {
             Ok(Some(project_group_reaction(reaction, id_format)))
         }
+        AccountEvent::GroupMute(mute) => Ok(Some(project_group_mute(mute, id_format))),
         AccountEvent::GroupRequest(request) => Ok(Some(project_group_request(request, id_format))),
         AccountEvent::FriendRequest(request) => {
             Ok(Some(project_friend_request(request, id_format)))
@@ -62,6 +63,25 @@ pub fn project_account_event(
             Ok(None)
         }
     }
+}
+
+fn project_group_mute(mute: &account_api::ResolvedGroupMute, id_format: IdFormat) -> Value {
+    let target = mute.target_id().unwrap_or_default();
+    json!({
+        "time": mute.occurred_at(),
+        "self_id": id_format.value(mute.account().qq_id()),
+        "post_type": "notice",
+        "notice_type": "group_ban",
+        "sub_type": if mute.duration() == 0 { "lift_ban" } else { "ban" },
+        "group_id": id_format.value(mute.group_id()),
+        "operator_id": id_format.value(mute.operator_id().unwrap_or_default()),
+        "user_id": id_format.value(target),
+        "duration": if mute.target_id().is_none() && mute.duration() != 0 {
+            -1_i64
+        } else {
+            i64::from(mute.duration())
+        }
+    })
 }
 
 fn project_group_reaction(

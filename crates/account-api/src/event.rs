@@ -149,6 +149,8 @@ pub enum AccountEvent {
     GroupNotice(Box<crate::ResolvedGroupNotice>),
     /// One authenticated group-message reaction with a retained local message correlation.
     GroupReaction(Box<crate::ResolvedGroupReaction>),
+    /// One authenticated group or member mute change.
+    GroupMute(Box<crate::ResolvedGroupMute>),
     /// One authenticated group request with an actionable, versioned reference.
     GroupRequest(Box<crate::ResolvedGroupRequest>),
     /// One authenticated friend request with an actionable, versioned reference.
