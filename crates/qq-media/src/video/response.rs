@@ -78,6 +78,7 @@ mod tests {
                 }],
             }),
             download: None,
+            download_rkey: None,
         }
         .encode_to_vec();
         let outer = qq_wire::encode_oidb_request(0x11ea, 100, &rich, 0)?;

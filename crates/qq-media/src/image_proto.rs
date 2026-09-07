@@ -8,6 +8,8 @@ pub(super) struct RichRequest {
     pub upload: Option<UploadRequest>,
     #[prost(message, optional, tag = "3")]
     pub download: Option<DownloadRequest>,
+    #[prost(message, optional, tag = "4")]
+    pub download_rkey: Option<DownloadRkeyRequest>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -168,6 +170,34 @@ pub(super) struct RichResponse {
     pub upload: Option<UploadResponse>,
     #[prost(message, optional, tag = "3")]
     pub download: Option<DownloadResponse>,
+    #[prost(message, optional, tag = "4")]
+    pub download_rkey: Option<DownloadRkeyResponse>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub(super) struct DownloadRkeyRequest {
+    #[prost(int32, repeated, tag = "1")]
+    pub types: Vec<i32>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub(super) struct DownloadRkeyResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub values: Vec<RkeyInfo>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub(super) struct RkeyInfo {
+    #[prost(string, tag = "1")]
+    pub value: String,
+    #[prost(uint64, tag = "2")]
+    pub ttl_seconds: u64,
+    #[prost(uint32, tag = "3")]
+    pub store_id: u32,
+    #[prost(uint32, optional, tag = "4")]
+    pub created_at: Option<u32>,
+    #[prost(uint32, optional, tag = "5")]
+    pub kind: Option<u32>,
 }
 
 #[derive(Clone, PartialEq, Message)]

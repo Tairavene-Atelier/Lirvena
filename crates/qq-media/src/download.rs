@@ -76,6 +76,7 @@ pub fn encode_image_download_request(
             }),
             client: Some(ClientMeta { agent_type: 2 }),
         }),
+        download_rkey: None,
         upload: None,
         download: Some(DownloadRequest {
             index: Some(index),
@@ -197,6 +198,7 @@ mod tests {
                     path: "/download/image".to_owned(),
                 }),
             }),
+            download_rkey: None,
         }
         .encode_to_vec();
         let outer = qq_wire::encode_oidb_request(0x11c5, 200, &rich, 0)?;
