@@ -168,6 +168,14 @@ fn unescape(value: &str, parameter: bool) -> String {
         .replace("&amp;", "&")
 }
 
+pub(crate) fn escape_parameter(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('[', "&#91;")
+        .replace(']', "&#93;")
+        .replace(',', "&#44;")
+}
+
 fn encoded_size(value: &Value) -> Result<usize, MessageParseError> {
     serde_json::to_vec(value)
         .map(|value| value.len())

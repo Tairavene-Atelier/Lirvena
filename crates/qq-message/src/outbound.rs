@@ -112,6 +112,17 @@ pub enum OutboundSegment<'a> {
     },
     /// One compressed light-application JSON payload.
     Json(&'a str),
+    /// One QQ location card.
+    Location {
+        /// Latitude in decimal degrees.
+        latitude: &'a str,
+        /// Longitude in decimal degrees.
+        longitude: &'a str,
+        /// Human-readable place name.
+        title: &'a str,
+        /// Human-readable address.
+        content: &'a str,
+    },
     /// One compressed XML rich-message payload.
     Xml {
         /// XML body.
@@ -441,6 +452,22 @@ fn compile_elements(
             OutboundSegment::Json(body) => Ok(vec![Element {
                 light_app: Some(LightApp {
                     data: crate::rich_content::compress(body)?,
+                    resource_id: None,
+                }),
+                ..Element::default()
+            }]),
+            OutboundSegment::Location {
+                latitude,
+                longitude,
+                title,
+                content,
+            } => Ok(vec![Element {
+                light_app: Some(LightApp {
+                    data: crate::rich_content::compress(
+                        &super::rich_text::location::encode_location(
+                            latitude, longitude, title, content,
+                        )?,
+                    )?,
                     resource_id: None,
                 }),
                 ..Element::default()

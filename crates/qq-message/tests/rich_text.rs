@@ -247,6 +247,22 @@ fn merged_forward_resource_is_projected_from_52194_xml_and_modern_json() -> Test
 }
 
 #[test]
+fn location_light_app_is_projected_without_losing_user_visible_fields() -> TestResult {
+    let input = rich([light_app(
+        r#"{"app":"com.tencent.map","meta":{"Location.Search":{"address":"A&B, [C]","enum_relation_type":1,"from":"plusPanel","id":"","lat":"-27.47050","lng":"153.02600","name":"Brisbane"}},"view":"LocationShare"}"#,
+    )?]);
+    let decoded = decode_rich_text(&input)?;
+    let Segment::Location(location) = decoded.elements()[0].segment() else {
+        return Err("expected location".into());
+    };
+    assert_eq!(location.latitude(), "-27.47050");
+    assert_eq!(location.longitude(), "153.02600");
+    assert_eq!(location.title(), "Brisbane");
+    assert_eq!(location.content(), "A&B, [C]");
+    Ok(())
+}
+
+#[test]
 fn reply_projects_only_complete_source_correlations() -> TestResult {
     let source = SourceFixture {
         sequences: vec![101],

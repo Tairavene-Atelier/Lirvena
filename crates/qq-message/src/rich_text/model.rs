@@ -94,6 +94,8 @@ pub enum Segment {
     Voice(super::VoiceSegment),
     /// Incoming JSON rich content.
     Json(String),
+    /// Incoming QQ location card.
+    Location(super::LocationSegment),
     /// Incoming XML rich content.
     Xml(XmlSegment),
     /// Incoming shake/poke content.

@@ -46,7 +46,7 @@ pub use recall::{
 pub use recall_response::{validate_group_recall_response, validate_private_recall_response};
 pub use request::{GroupRequestSignal, decode_group_request_signal};
 pub use rich_text::{
-    FaceKind, FaceSegment, ForwardSegment, ImageSegment, MediaFile, MediaScope, MentionSegment,
-    MentionTarget, OpaqueAttachment, PokeSegment, ReplySegment, RichTextElement, RichTextMessage,
-    Segment, VideoSegment, VoiceSegment, XmlSegment, decode_rich_text,
+    FaceKind, FaceSegment, ForwardSegment, ImageSegment, LocationSegment, MediaFile, MediaScope,
+    MentionSegment, MentionTarget, OpaqueAttachment, PokeSegment, ReplySegment, RichTextElement,
+    RichTextMessage, Segment, VideoSegment, VoiceSegment, XmlSegment, decode_rich_text,
 };
