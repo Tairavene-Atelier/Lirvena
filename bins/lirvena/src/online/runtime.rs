@@ -565,14 +565,16 @@ impl OnlineRuntime {
             .publish(AccountEvent::Message(Box::new(message)));
         if let (Some(file), Some((group_id, sender_id))) = (group_file, group_route) {
             match super::group_files::resolve_notice(
-                &self.identity,
-                group_id,
-                sender_id,
+                super::group_files::GroupFileResolution {
+                    identity: &self.identity,
+                    group_id,
+                    sender_id,
+                    occurred_at,
+                    packets: &self.packets,
+                    pushes: &self.pushes,
+                    context,
+                },
                 &file,
-                occurred_at,
-                &self.packets,
-                &self.pushes,
-                context,
             )
             .await
             {
