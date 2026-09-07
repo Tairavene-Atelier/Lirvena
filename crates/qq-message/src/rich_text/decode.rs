@@ -56,6 +56,11 @@ fn decode_element(encoded: Vec<u8>) -> Result<RichTextElement, MessageDecodeErro
     let projections = [
         wire.text.as_deref().map(decode_text).transpose()?.flatten(),
         wire.face.as_deref().map(decode_face).transpose()?.flatten(),
+        wire.market_face
+            .as_deref()
+            .map(crate::market_face::decode_market_face)
+            .transpose()?
+            .map(Segment::MarketFace),
         wire.common
             .as_deref()
             .map(decode_common)

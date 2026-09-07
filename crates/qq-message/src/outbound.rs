@@ -67,6 +67,17 @@ pub enum OutboundSegment<'a> {
     },
     /// One classic QQ face identifier.
     Face(u16),
+    /// One QQ marketplace face using caller-supplied authenticated material.
+    MarketFace {
+        /// Hexadecimal marketplace emoji identifier.
+        emoji_id: &'a str,
+        /// Marketplace package identifier.
+        package_id: i32,
+        /// QQ-provided marketplace lookup key.
+        key: &'a str,
+        /// Human-readable face summary.
+        summary: &'a str,
+    },
     /// Tencent-created modern and legacy image message material.
     Image {
         /// Whether this image targets a group scene.
@@ -371,6 +382,20 @@ fn compile_elements(
                 }),
                 ..Element::default()
             }]),
+            OutboundSegment::MarketFace {
+                emoji_id,
+                package_id,
+                key,
+                summary,
+            } => Ok(vec![Element {
+                market_face: Some(crate::market_face::encode_market_face(
+                    emoji_id,
+                    *package_id,
+                    key,
+                    summary,
+                )?),
+                ..Element::default()
+            }]),
             OutboundSegment::Image {
                 group,
                 message_info,
@@ -662,6 +687,8 @@ struct Element {
     face: Option<Face>,
     #[prost(bytes = "vec", optional, tag = "4")]
     not_online_image: Option<Vec<u8>>,
+    #[prost(bytes = "vec", optional, tag = "6")]
+    market_face: Option<Vec<u8>>,
     #[prost(bytes = "vec", optional, tag = "8")]
     custom_face: Option<Vec<u8>>,
     #[prost(message, optional, tag = "12")]

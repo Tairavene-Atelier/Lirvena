@@ -446,6 +446,12 @@ pub(super) enum CompiledSegment {
         display: String,
     },
     Face(u16),
+    MarketFace {
+        emoji_id: String,
+        package_id: i32,
+        key: String,
+        summary: String,
+    },
     Image {
         source: String,
         group: bool,
@@ -494,6 +500,17 @@ impl CompiledSegment {
                 display,
             },
             Self::Face(value) => OutboundSegment::Face(*value),
+            Self::MarketFace {
+                emoji_id,
+                package_id,
+                key,
+                summary,
+            } => OutboundSegment::MarketFace {
+                emoji_id,
+                package_id: *package_id,
+                key,
+                summary,
+            },
             Self::Image {
                 group,
                 message_info,
@@ -549,6 +566,7 @@ impl CompiledSegment {
             Self::Text(value) => value,
             Self::MentionEveryone { display } | Self::Mention { display, .. } => display,
             Self::Face(_) => "[表情]",
+            Self::MarketFace { summary, .. } => summary,
             Self::Image { .. } => "[图片]",
             Self::Record { .. } => "[语音]",
             Self::Video { .. } => "[视频]",
@@ -566,6 +584,20 @@ impl CompiledSegment {
             Self::MentionEveryone { .. } => json!({"type": "at", "data": {"qq": "all"}}),
             Self::Mention { uin, .. } => json!({"type": "at", "data": {"qq": uin}}),
             Self::Face(value) => json!({"type": "face", "data": {"id": value}}),
+            Self::MarketFace {
+                emoji_id,
+                package_id,
+                key,
+                summary,
+            } => json!({
+                "type": "mface",
+                "data": {
+                    "emoji_id": emoji_id,
+                    "emoji_package_id": package_id,
+                    "key": key,
+                    "summary": summary,
+                }
+            }),
             Self::Image { source, .. } => json!({"type": "image", "data": {"file": source}}),
             Self::Record { source, .. } => json!({"type": "record", "data": {"file": source}}),
             Self::Video { source, .. } => json!({"type": "video", "data": {"file": source}}),
@@ -702,6 +734,7 @@ async fn compile_segment(
             .and_then(|value| u16::try_from(value).ok())
             .map(CompiledSegment::Face)
             .ok_or(AccountActionError::BadParameters),
+        "mface" => compile_market_face(segment),
         "at" if matches!(target, SendTextTarget::Group { .. }) => {
             let target = segment
                 .data()
@@ -835,6 +868,34 @@ async fn compile_segment(
     }
 }
 
+fn compile_market_face(segment: &MessageSegment) -> Result<CompiledSegment, AccountActionError> {
+    let emoji_id = segment
+        .data()
+        .get("emoji_id")
+        .and_then(Value::as_str)
+        .ok_or(AccountActionError::BadParameters)?;
+    let package_id = segment_u32(segment.data().get("emoji_package_id"))
+        .and_then(|value| i32::try_from(value).ok())
+        .filter(|value| *value > 0)
+        .ok_or(AccountActionError::BadParameters)?;
+    let key = segment
+        .data()
+        .get("key")
+        .and_then(Value::as_str)
+        .ok_or(AccountActionError::BadParameters)?;
+    let summary = match segment.data().get("summary") {
+        Some(Value::String(value)) if !value.is_empty() => value,
+        Some(Value::String(_)) | None => "[商城表情]",
+        Some(_) => return Err(AccountActionError::BadParameters),
+    };
+    Ok(CompiledSegment::MarketFace {
+        emoji_id: emoji_id.to_owned(),
+        package_id,
+        key: key.to_owned(),
+        summary: summary.to_owned(),
+    })
+}
+
 fn quote_scope_matches(
     recall: &RecallTarget,
     target: &SendTextTarget<'_>,
@@ -869,10 +930,41 @@ fn segment_u32(value: Option<&Value>) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use account_message_store::RecallTarget;
+    use adapter_onebot::parse_message;
     use qq_message::{OutboundSegment, SendTextTarget};
     use serde_json::json;
 
-    use super::{CompiledSegment, quote_scope_matches};
+    use super::{CompiledSegment, compile_market_face, quote_scope_matches};
+
+    #[test]
+    fn marketplace_face_accepts_onebot_ids_and_has_a_stable_fallback_summary()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let segments = parse_message(
+            &json!([{
+                "type": "mface",
+                "data": {
+                    "emoji_id": "012afe",
+                    "emoji_package_id": "42",
+                    "key": "face-key"
+                }
+            }]),
+            false,
+        )?;
+        let compiled = compile_market_face(&segments[0])?;
+        assert_eq!(
+            compiled.onebot_value(),
+            json!({
+                "type": "mface",
+                "data": {
+                    "emoji_id": "012afe",
+                    "emoji_package_id": 42,
+                    "key": "face-key",
+                    "summary": "[商城表情]"
+                }
+            })
+        );
+        Ok(())
+    }
 
     #[test]
     fn compiled_forward_preserves_onebot_semantics() {

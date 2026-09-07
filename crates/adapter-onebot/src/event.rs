@@ -336,6 +336,16 @@ fn segment_json(element: &qq_message::RichTextElement, reply_id: Option<u32>) ->
             json!({"type": "at", "data": {"qq": qq}})
         }
         Segment::Face(face) => json!({"type": "face", "data": {"id": face.id()}}),
+        Segment::MarketFace(face) => json!({
+            "type": "mface",
+            "data": {
+                "url": face.asset_url(),
+                "emoji_package_id": face.package_id(),
+                "emoji_id": face.emoji_id(),
+                "key": face.key(),
+                "summary": face.summary(),
+            }
+        }),
         Segment::Image(image) => media_segment("image", image.file()),
         Segment::Video(video) => media_segment("video", video.file()),
         Segment::Voice(voice) => media_segment("record", voice.file()),
@@ -382,6 +392,7 @@ fn raw_segment(element: &qq_message::RichTextElement, reply_id: Option<u32>) -> 
         Segment::Text(text) => text.clone(),
         Segment::Mention(mention) => format!("@{}", mention.display()),
         Segment::Face(face) => format!("[CQ:face,id={}]", face.id()),
+        Segment::MarketFace(_) => "[CQ:mface]".to_owned(),
         Segment::Image(_) => "[CQ:image]".to_owned(),
         Segment::Video(_) => "[CQ:video]".to_owned(),
         Segment::Voice(_) => "[CQ:record]".to_owned(),

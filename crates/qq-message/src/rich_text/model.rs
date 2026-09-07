@@ -84,6 +84,8 @@ pub enum Segment {
     Mention(MentionSegment),
     /// A standard or animated face.
     Face(FaceSegment),
+    /// A QQ marketplace face with its authenticated lookup material.
+    MarketFace(crate::MarketFaceSegment),
     /// Incoming image metadata.
     Image(super::ImageSegment),
     /// Incoming video metadata.
