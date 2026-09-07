@@ -1,8 +1,8 @@
 use account_api::{
     AccountIdentity, ResolvedGroupMute, ResolvedGroupNotice, ResolvedGroupNoticeKind,
-    ResolvedGroupReaction,
+    ResolvedGroupReaction, ResolvedGroupRecall,
 };
-use qq_message::{GroupMute, GroupNotice, GroupReaction, MemberDecreaseKind};
+use qq_message::{GroupMute, GroupNotice, GroupReaction, GroupRecall, MemberDecreaseKind};
 
 use super::{
     directory, message_registry::MessageRegistry, packets::PacketRuntime, push::PushRuntime,
@@ -114,6 +114,37 @@ pub(super) async fn resolve_group_mute(
         operator_id,
         target_id,
         mute.duration(),
+        occurred_at,
+    )
+    .ok()
+}
+
+pub(super) async fn resolve_group_recall(
+    identity: &AccountIdentity,
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    message_id: u32,
+    recall: GroupRecall,
+    occurred_at: u64,
+    context: &mut OnlineContext<'_>,
+) -> Option<ResolvedGroupRecall> {
+    if message_id == 0 {
+        return None;
+    }
+    let members = directory::group_members(recall.group_id(), packets, pushes, context)
+        .await
+        .ok()?;
+    let user_id = resolve_uid(recall.author_uid(), Some(&members))?;
+    let operator_id = recall
+        .operator_uid()
+        .and_then(|uid| resolve_uid(uid, Some(&members)))?;
+    ResolvedGroupRecall::new(
+        identity.clone(),
+        u64::from(recall.group_id()),
+        user_id,
+        operator_id,
+        message_id,
+        recall.tip().to_owned(),
         occurred_at,
     )
     .ok()

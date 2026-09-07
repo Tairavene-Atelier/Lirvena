@@ -151,6 +151,8 @@ pub enum AccountEvent {
     GroupReaction(Box<crate::ResolvedGroupReaction>),
     /// One authenticated group or member mute change.
     GroupMute(Box<crate::ResolvedGroupMute>),
+    /// One authenticated group-message recall with retained correlation.
+    GroupRecall(Box<crate::ResolvedGroupRecall>),
     /// One authenticated group request with an actionable, versioned reference.
     GroupRequest(Box<crate::ResolvedGroupRequest>),
     /// One authenticated friend request with an actionable, versioned reference.

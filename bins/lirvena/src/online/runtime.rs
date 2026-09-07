@@ -325,6 +325,38 @@ impl OnlineRuntime {
                         ),
                     }
                 }
+                DecodedPush::GroupRecall {
+                    recall,
+                    occurred_at,
+                    ..
+                } => {
+                    let message_id = self
+                        .messages
+                        .find_group_message_id(recall.group_id(), u64::from(recall.sequence()))
+                        .ok()
+                        .flatten()
+                        .unwrap_or_default();
+                    match notices::resolve_group_recall(
+                        &self.identity,
+                        &self.packets,
+                        &self.pushes,
+                        message_id,
+                        recall,
+                        occurred_at,
+                        context,
+                    )
+                    .await
+                    {
+                        Some(recall) => {
+                            let _delivered = self
+                                .events
+                                .publish(AccountEvent::GroupRecall(Box::new(recall)));
+                        }
+                        None => eprintln!(
+                            "Lirvena retained no OneBot group recall because its authenticated message or UID correlation was unavailable"
+                        ),
+                    }
+                }
                 DecodedPush::GroupRequest {
                     signal,
                     occurred_at,

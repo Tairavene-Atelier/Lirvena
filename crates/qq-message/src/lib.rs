@@ -4,6 +4,7 @@ mod decoder;
 mod error;
 mod friend_request;
 mod group_mute;
+mod group_recall;
 mod history;
 mod long_message;
 mod market_face;
@@ -23,6 +24,7 @@ pub use decoder::{MessageDecoder, MessageDisposition};
 pub use error::MessageDecodeError;
 pub use friend_request::{FriendRequestSignal, decode_friend_request_signal};
 pub use group_mute::{GroupMute, decode_group_mute};
+pub use group_recall::{GroupRecall, decode_group_recalls};
 pub use history::{
     FRIEND_HISTORY_ROUTE, GROUP_HISTORY_ROUTE, HistoricalMessage, decode_friend_history_response,
     decode_group_history_response, encode_friend_history_request, encode_group_history_request,
