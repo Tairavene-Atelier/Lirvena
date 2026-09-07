@@ -511,6 +511,7 @@ fn segment_json(element: &qq_message::RichTextElement, reply_id: Option<u32>) ->
             "type": "file",
             "data": {"file": file.file_id(), "name": file.name(), "size": file.size()}
         }),
+        Segment::Markdown(content) => json!({"type": "markdown", "data": {"content": content}}),
         Segment::Json(body) => json!({"type": "json", "data": {"data": body}}),
         Segment::Location(location) => json!({
             "type": "location",
@@ -578,6 +579,7 @@ fn raw_segment(element: &qq_message::RichTextElement, reply_id: Option<u32>) -> 
         Segment::Video(_) => "[CQ:video]".to_owned(),
         Segment::Voice(_) => "[CQ:record]".to_owned(),
         Segment::File(_) => "[CQ:file]".to_owned(),
+        Segment::Markdown(_) => "[CQ:markdown]".to_owned(),
         Segment::Json(_) => "[CQ:json]".to_owned(),
         Segment::Location(location) => format!(
             "[CQ:location,lat={},lon={},title={},content={}]",

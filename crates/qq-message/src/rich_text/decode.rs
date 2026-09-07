@@ -208,6 +208,11 @@ fn decode_common(input: &[u8]) -> Result<Option<Segment>, MessageDecodeError> {
     if wire.service_type == 48 {
         return super::media_decode::decode(wire.business_type, &body);
     }
+    if wire.service_type == 45 && wire.business_type == 1 {
+        return crate::outbound::structured::decode_markdown(&body)
+            .map(Segment::Markdown)
+            .map(Some);
+    }
     if wire.service_type == 2 {
         let (kind, strength) = crate::rich_content::decode_poke(&body)?;
         return Ok(Some(Segment::Poke(PokeSegment::new(kind, strength))));

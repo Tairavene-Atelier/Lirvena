@@ -101,6 +101,12 @@ struct CommonFixture {
     business_type: u32,
 }
 
+#[derive(Clone, PartialEq, Message)]
+struct MarkdownFixture {
+    #[prost(string, tag = "1")]
+    content: String,
+}
+
 #[derive(Clone, Copy, PartialEq, Message)]
 struct PokeFixture {
     #[prost(uint32, tag = "1")]
@@ -161,6 +167,37 @@ fn text_mentions_and_wire_order_are_projected() -> TestResult {
         return Err("expected everyone mention".into());
     };
     assert_eq!(everyone.target(), &MentionTarget::Everyone);
+    Ok(())
+}
+
+#[test]
+fn markdown_common_element_is_projected() -> TestResult {
+    let element = ElementFixture {
+        text: None,
+        face: None,
+        rich_message: None,
+        light_app: None,
+        common: Some(
+            CommonFixture {
+                service: 45,
+                body: Some(
+                    MarkdownFixture {
+                        content: "**hello**".to_owned(),
+                    }
+                    .encode_to_vec(),
+                ),
+                business_type: 1,
+            }
+            .encode_to_vec(),
+        ),
+        source: None,
+    }
+    .encode_to_vec();
+    let decoded = decode_rich_text(&rich([element]))?;
+    assert_eq!(
+        decoded.elements()[0].segment(),
+        &Segment::Markdown("**hello**".to_owned())
+    );
     Ok(())
 }
 

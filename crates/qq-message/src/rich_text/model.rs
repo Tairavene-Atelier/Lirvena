@@ -94,6 +94,8 @@ pub enum Segment {
     Voice(super::VoiceSegment),
     /// Incoming group-file metadata.
     File(GroupFileSegment),
+    /// Incoming QQ markdown content.
+    Markdown(String),
     /// Incoming JSON rich content.
     Json(String),
     /// Incoming QQ location card.

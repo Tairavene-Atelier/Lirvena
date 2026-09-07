@@ -19,6 +19,17 @@ pub(super) fn encode_markdown(content: &str) -> Result<Vec<u8>, MessageDecodeErr
     .encode_to_vec())
 }
 
+pub(crate) fn decode_markdown(input: &[u8]) -> Result<String, MessageDecodeError> {
+    let body = MarkdownBody::decode(input).map_err(|_error| MessageDecodeError)?;
+    if body.content.is_empty()
+        || body.content.len() > MAX_MARKDOWN_BYTES
+        || body.content.contains('\0')
+    {
+        return Err(MessageDecodeError);
+    }
+    Ok(body.content)
+}
+
 pub(super) fn encode_keyboard(input: &str) -> Result<Vec<u8>, MessageDecodeError> {
     if input.is_empty() || input.len() > MAX_KEYBOARD_BYTES {
         return Err(MessageDecodeError);
