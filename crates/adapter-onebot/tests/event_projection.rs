@@ -220,6 +220,12 @@ fn rich_segments_project_to_standard_onebot_shapes() -> TestResult {
                 kind: 2,
                 strength: 7,
             },
+            OutboundSegment::MarketFace {
+                emoji_id: "012afe",
+                package_id: 42,
+                key: "face-key",
+                summary: "[商城表情]",
+            },
         ],
         client_sequence: 7,
         random: 8,
@@ -242,12 +248,22 @@ fn rich_segments_project_to_standard_onebot_shapes() -> TestResult {
             {"type": "json", "data": {"data": "{\"app\":\"demo\"}"}},
             {"type": "xml", "data": {"data": "<msg/>", "service_id": 35}},
             {"type": "forward", "data": {"id": "forward-1"}},
-            {"type": "poke", "data": {"type": 2, "strength": 7, "id": -1}}
+            {"type": "poke", "data": {"type": 2, "strength": 7, "id": -1}},
+            {
+                "type": "mface",
+                "data": {
+                    "url": "https://gxh.vip.qq.com/club/item/parcel/item/01/012afe/raw300.gif",
+                    "emoji_package_id": 42,
+                    "emoji_id": "012afe",
+                    "key": "face-key",
+                    "summary": "[商城表情]"
+                }
+            }
         ])
     );
     assert_eq!(
         projected["raw_message"],
-        "[CQ:json][CQ:xml][CQ:forward,id=forward-1][CQ:poke,type=2,strength=7]"
+        "[CQ:json][CQ:xml][CQ:forward,id=forward-1][CQ:poke,type=2,strength=7][CQ:mface]"
     );
     Ok(())
 }

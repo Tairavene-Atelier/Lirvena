@@ -20,6 +20,8 @@ pub(super) struct ElementWire {
     pub face: Option<Vec<u8>>,
     #[prost(bytes = "vec", optional, tag = "4")]
     pub direct_image: Option<Vec<u8>>,
+    #[prost(bytes = "vec", optional, tag = "6")]
+    pub market_face: Option<Vec<u8>>,
     #[prost(bytes = "vec", optional, tag = "8")]
     pub group_image: Option<Vec<u8>>,
     #[prost(bytes = "vec", optional, tag = "12")]

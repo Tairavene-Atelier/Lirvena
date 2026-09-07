@@ -5,6 +5,7 @@ mod error;
 mod friend_request;
 mod history;
 mod long_message;
+mod market_face;
 mod model;
 mod notice;
 mod outbound;
@@ -28,6 +29,7 @@ pub use long_message::{
     LongMessageTarget, encode_long_message_receive, encode_long_message_send,
     parse_long_message_receive, parse_long_message_send,
 };
+pub use market_face::MarketFaceSegment;
 pub use model::{MessageClass, MessageEnvelope, MessagePayload, MessageRoute};
 pub use notice::{GroupNotice, MemberDecreaseKind, MemberIncreaseKind, decode_group_notice};
 pub use outbound::{
