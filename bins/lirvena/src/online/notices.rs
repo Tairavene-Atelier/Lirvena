@@ -1,8 +1,11 @@
 use account_api::{
-    AccountIdentity, ResolvedGroupMute, ResolvedGroupNotice, ResolvedGroupNoticeKind,
-    ResolvedGroupReaction, ResolvedGroupRecall,
+    AccountIdentity, ResolvedFriendRecall, ResolvedGroupMute, ResolvedGroupNotice,
+    ResolvedGroupNoticeKind, ResolvedGroupReaction, ResolvedGroupRecall,
 };
-use qq_message::{GroupMute, GroupNotice, GroupReaction, GroupRecall, MemberDecreaseKind};
+use qq_directory::FriendEntry;
+use qq_message::{
+    FriendRecall, GroupMute, GroupNotice, GroupReaction, GroupRecall, MemberDecreaseKind,
+};
 
 use super::{
     directory, message_registry::MessageRegistry, packets::PacketRuntime, push::PushRuntime,
@@ -143,6 +146,39 @@ pub(super) async fn resolve_group_recall(
         u64::from(recall.group_id()),
         user_id,
         operator_id,
+        message_id,
+        recall.tip().to_owned(),
+        occurred_at,
+    )
+    .ok()
+}
+
+pub(super) async fn resolve_friend_recall(
+    identity: &AccountIdentity,
+    self_uid: &str,
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    friends: &mut std::collections::BTreeMap<u32, FriendEntry>,
+    message_id: u32,
+    recall: FriendRecall,
+    occurred_at: u64,
+    context: &mut OnlineContext<'_>,
+) -> Option<ResolvedFriendRecall> {
+    if message_id == 0 {
+        return None;
+    }
+    let user_id = if recall.from_uid() == self_uid {
+        identity.qq_id()
+    } else {
+        u64::from(
+            directory::friend_uin_by_uid(recall.from_uid(), packets, pushes, friends, context)
+                .await
+                .ok()?,
+        )
+    };
+    ResolvedFriendRecall::new(
+        identity.clone(),
+        user_id,
         message_id,
         recall.tip().to_owned(),
         occurred_at,

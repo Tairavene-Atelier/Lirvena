@@ -3,10 +3,10 @@ use std::io;
 
 use qq_login::CredentialLogin;
 use qq_message::{
-    FriendRequestSignal, GroupMute, GroupNotice, GroupReaction, GroupRecall, GroupRequestSignal,
-    MessageDecoder, MessageDisposition, MessageEnvelope, RichTextMessage,
-    decode_friend_request_signal, decode_group_mute, decode_group_notice, decode_group_reaction,
-    decode_group_recalls, decode_group_request_signal, decode_rich_text,
+    FriendRecall, FriendRequestSignal, GroupMute, GroupNotice, GroupReaction, GroupRecall,
+    GroupRequestSignal, MessageDecoder, MessageDisposition, MessageEnvelope, RichTextMessage,
+    decode_friend_recall, decode_friend_request_signal, decode_group_mute, decode_group_notice,
+    decode_group_reaction, decode_group_recalls, decode_group_request_signal, decode_rich_text,
 };
 use qq_online::{PushOutcome, PushProcessor};
 use qq_profile::{LinuxNtProfile, PushPlan, decode_push_plan};
@@ -57,6 +57,11 @@ pub(super) enum DecodedPush {
         occurred_at: u64,
         encoded_len: usize,
     },
+    FriendRecall {
+        recall: FriendRecall,
+        occurred_at: u64,
+        encoded_len: usize,
+    },
     GroupRequest {
         signal: GroupRequestSignal,
         occurred_at: u64,
@@ -76,6 +81,7 @@ impl DecodedPush {
             | Self::GroupReaction { encoded_len, .. }
             | Self::GroupMute { encoded_len, .. }
             | Self::GroupRecall { encoded_len, .. }
+            | Self::FriendRecall { encoded_len, .. }
             | Self::GroupRequest { encoded_len, .. }
             | Self::FriendRequest { encoded_len, .. } => *encoded_len,
         }
@@ -278,6 +284,18 @@ impl PushRuntime {
                     occurred_at,
                     encoded_len,
                 }));
+            return Ok(());
+        }
+        if let Some(recall) = decode_friend_recall(&envelope)? {
+            self.queued_message_bytes = self
+                .queued_message_bytes
+                .checked_add(encoded_len)
+                .ok_or_else(|| io::Error::other("message queue byte count overflow"))?;
+            self.events.push_back(DecodedPush::FriendRecall {
+                recall,
+                occurred_at: u64::try_from(envelope.timestamp()).unwrap_or_default(),
+                encoded_len,
+            });
             return Ok(());
         }
         let rich_text = envelope

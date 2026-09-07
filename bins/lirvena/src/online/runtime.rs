@@ -357,6 +357,44 @@ impl OnlineRuntime {
                         ),
                     }
                 }
+                DecodedPush::FriendRecall {
+                    recall,
+                    occurred_at,
+                    ..
+                } => {
+                    let message_id = self
+                        .messages
+                        .find_private_recall_message_id(
+                            u64::from(recall.client_sequence()),
+                            recall.random(),
+                            recall.timestamp(),
+                        )
+                        .ok()
+                        .flatten()
+                        .unwrap_or_default();
+                    match notices::resolve_friend_recall(
+                        &self.identity,
+                        context.credential.uid(),
+                        &self.packets,
+                        &self.pushes,
+                        &mut self.friends,
+                        message_id,
+                        recall,
+                        occurred_at,
+                        context,
+                    )
+                    .await
+                    {
+                        Some(recall) => {
+                            let _delivered = self
+                                .events
+                                .publish(AccountEvent::FriendRecall(Box::new(recall)));
+                        }
+                        None => eprintln!(
+                            "Lirvena retained no OneBot friend recall because its authenticated message or UID correlation was unavailable"
+                        ),
+                    }
+                }
                 DecodedPush::GroupRequest {
                     signal,
                     occurred_at,

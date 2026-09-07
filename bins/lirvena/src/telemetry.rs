@@ -169,6 +169,7 @@ fn record_event(
         | AccountEvent::GroupReaction(_)
         | AccountEvent::GroupMute(_)
         | AccountEvent::GroupRecall(_)
+        | AccountEvent::FriendRecall(_)
         | AccountEvent::GroupRequest(_)
         | AccountEvent::FriendRequest(_) => Ok(()),
         AccountEvent::Message(_) => now_ms()
