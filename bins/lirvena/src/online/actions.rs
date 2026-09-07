@@ -58,6 +58,17 @@ pub(super) async fn execute_account_action(
                 .execute(request, identity.qq_id(), packets, pushes, context)
                 .await
         }
+        "_get_group_notice" | "_send_group_notice" | "_del_group_notice" => {
+            super::group_notice::execute(
+                request,
+                identity.qq_id(),
+                packets,
+                pushes,
+                resources.tickets,
+                context,
+            )
+            .await
+        }
         "get_friend_list" => directory::friend_list(packets, pushes, friends, context).await,
         "get_stranger_info" => {
             stranger_info(
