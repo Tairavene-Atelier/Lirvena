@@ -8,6 +8,7 @@ mod delete_friend;
 mod essence;
 mod face_asset;
 mod friend_request;
+mod group_bot;
 mod group_file;
 mod group_request;
 mod highway_file;
@@ -25,6 +26,7 @@ pub use face_asset::{
     parse_market_face_keys_response,
 };
 pub use friend_request::friend_request;
+pub use group_bot::{group_bot_callback, group_bot_status};
 pub use group_file::{
     GroupFileControl, GroupFileEntry, GroupFileInfo, GroupFilePage, GroupFileUploadPlan,
     GroupFileUploadSpec, GroupFolderInfo, create_group_file_folder, delete_group_file,
