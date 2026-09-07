@@ -63,6 +63,7 @@ mod tests {
                 sub_files: Vec::new(),
             }),
             download: None,
+            download_rkey: None,
         }
         .encode_to_vec();
         let outer = qq_wire::encode_oidb_request(0x11c4, 100, &rich, 0)?;
@@ -90,6 +91,7 @@ mod tests {
                 sub_files: Vec::new(),
             }),
             download: None,
+            download_rkey: None,
         }
         .encode_to_vec();
         let outer = qq_wire::encode_oidb_request(0x11c5, 100, &rich, 0)?;

@@ -12,6 +12,7 @@ mod record;
 mod reference;
 mod resolver;
 mod rich_request;
+mod rkey;
 mod target;
 mod upload;
 mod video;
@@ -33,6 +34,10 @@ pub use record::{
 };
 pub use reference::MediaReference;
 pub use resolver::{MediaPolicy, MediaResolver, RemoteMediaPolicy};
+pub use rkey::{
+    MediaRkey, MediaRkeyKind, MediaRkeyRequest, encode_media_rkey_request,
+    parse_media_rkey_response,
+};
 pub use target::MediaTarget;
 pub use upload::RichMediaUploadPlan;
 pub use video::{
