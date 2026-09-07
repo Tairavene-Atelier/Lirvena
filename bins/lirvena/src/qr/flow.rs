@@ -11,6 +11,7 @@ use qq_login::{
 use qq_profile::LinuxNtProfile;
 use qq_session::AuthenticatedSession;
 use qq_transport::{QqEndpoint, QqTransport, TransportConfig};
+use tokio::sync::watch;
 
 use super::ceylith::{OpaqueOperation, profile_peer};
 use super::credential::exchange;
@@ -28,6 +29,7 @@ pub(super) struct AccountFlow<'a> {
     pub(super) realm: AssignedRealm,
     pub(super) account: &'a AccountHandle,
     pub(super) events: &'a AccountEventPublisher,
+    pub(super) restart: watch::Sender<bool>,
 }
 
 pub(super) async fn run(
@@ -42,6 +44,7 @@ pub(super) async fn run(
         realm,
         account,
         events,
+        restart,
     } = flow;
     let mut login = LoginMachine::new();
     let _event = begin_qr_request(&mut login, now_ms()?)?;
@@ -128,8 +131,14 @@ pub(super) async fn run(
     )?;
     let _delivered = events.publish(AccountEvent::IdentityReady(identity.clone()));
     let mut qq = AuthenticatedSession::new(qq);
-    let mut online =
-        OnlineRuntime::new(profile, &device, identity, events.clone(), state_directory)?;
+    let mut online = OnlineRuntime::new(
+        profile,
+        &device,
+        identity,
+        events.clone(),
+        state_directory,
+        restart,
+    )?;
     online
         .bootstrap(OnlineContext {
             ceylith,
