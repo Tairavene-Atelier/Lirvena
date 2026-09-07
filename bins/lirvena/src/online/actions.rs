@@ -763,14 +763,17 @@ async fn compile_segment(
             .map(|value| CompiledSegment::Markdown(value.to_owned()))
             .ok_or(AccountActionError::BadParameters),
         "keyboard" => {
-            let content = segment
+            let keyboard_content = segment
                 .data()
                 .get("content")
                 .cloned()
                 .ok_or(AccountActionError::BadParameters)?;
-            let wire = serde_json::to_string(&content)
+            let wire = serde_json::to_string(&keyboard_content)
                 .map_err(|_error| AccountActionError::BadParameters)?;
-            Ok(CompiledSegment::Keyboard { wire, content })
+            Ok(CompiledSegment::Keyboard {
+                wire,
+                content: keyboard_content,
+            })
         }
         "mface" => compile_market_face(segment),
         "at" if matches!(target, SendTextTarget::Group { .. }) => {
