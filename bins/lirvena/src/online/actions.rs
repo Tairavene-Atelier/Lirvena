@@ -69,6 +69,17 @@ pub(super) async fn execute_account_action(
             )
             .await
         }
+        "get_group_honor_info" => {
+            super::group_honor::get(
+                request,
+                identity.qq_id(),
+                packets,
+                pushes,
+                resources.tickets,
+                context,
+            )
+            .await
+        }
         "get_friend_list" => directory::friend_list(packets, pushes, friends, context).await,
         "get_stranger_info" => {
             stranger_info(
