@@ -5,10 +5,10 @@ use qq_login::CredentialLogin;
 use qq_message::{
     FriendRecall, FriendRequestSignal, GroupEssence, GroupMute, GroupNameChange, GroupNotice,
     GroupReaction, GroupRecall, GroupRequestSignal, MessageDecoder, MessageDisposition,
-    MessageEnvelope, PokeNotice, RichTextMessage, decode_friend_recall,
+    MessageEnvelope, PokeNotice, PrivateFileNotice, RichTextMessage, decode_friend_recall,
     decode_friend_request_signal, decode_group_essence, decode_group_mute,
     decode_group_name_change, decode_group_notice, decode_group_reaction, decode_group_recalls,
-    decode_group_request_signal, decode_poke_notice, decode_rich_text,
+    decode_group_request_signal, decode_poke_notice, decode_private_file_notice, decode_rich_text,
 };
 use qq_online::{PushOutcome, PushProcessor};
 use qq_profile::{LinuxNtProfile, PushPlan, decode_push_plan};
@@ -69,6 +69,11 @@ pub(super) enum DecodedPush {
         occurred_at: u64,
         encoded_len: usize,
     },
+    PrivateFile {
+        file: PrivateFileNotice,
+        occurred_at: u64,
+        encoded_len: usize,
+    },
     GroupRecall {
         recall: GroupRecall,
         occurred_at: u64,
@@ -100,6 +105,7 @@ impl DecodedPush {
             | Self::GroupNameChange { encoded_len, .. }
             | Self::Poke { encoded_len, .. }
             | Self::GroupEssence { encoded_len, .. }
+            | Self::PrivateFile { encoded_len, .. }
             | Self::GroupRecall { encoded_len, .. }
             | Self::FriendRecall { encoded_len, .. }
             | Self::GroupRequest { encoded_len, .. }
@@ -228,6 +234,18 @@ impl PushRuntime {
             return Ok(());
         };
         let encoded_len = encoded_envelope_len(&envelope);
+        if let Some(file) = decode_private_file_notice(&envelope)? {
+            self.queued_message_bytes = self
+                .queued_message_bytes
+                .checked_add(encoded_len)
+                .ok_or_else(|| io::Error::other("message queue byte count overflow"))?;
+            self.events.push_back(DecodedPush::PrivateFile {
+                file,
+                occurred_at: u64::try_from(envelope.timestamp()).unwrap_or_default(),
+                encoded_len,
+            });
+            return Ok(());
+        }
         if let Some(signal) = decode_friend_request_signal(&envelope)? {
             self.queued_message_bytes = self
                 .queued_message_bytes

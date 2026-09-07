@@ -249,7 +249,7 @@ impl OnlineRuntime {
     ) -> Result<(), Box<dyn std::error::Error>> {
         while let Some(event) = self.pushes.pop_event() {
             match event {
-                DecodedPush::Message(message) => self.publish_message(*message)?,
+                DecodedPush::Message(message) => self.publish_message(*message, context).await?,
                 DecodedPush::GroupNotice {
                     notice,
                     occurred_at,
@@ -393,6 +393,27 @@ impl OnlineRuntime {
                         ),
                     }
                 }
+                DecodedPush::PrivateFile {
+                    file, occurred_at, ..
+                } => match super::private_file::resolve_notice(
+                    &self.identity,
+                    &file,
+                    occurred_at,
+                    &self.packets,
+                    &self.pushes,
+                    context,
+                )
+                .await
+                {
+                    Ok(file) => {
+                        let _delivered = self
+                            .events
+                            .publish(AccountEvent::PrivateFile(Box::new(file)));
+                    }
+                    Err(_error) => eprintln!(
+                        "Lirvena retained no OneBot private-file notice because QQ did not issue a validated download URL"
+                    ),
+                },
                 DecodedPush::GroupRecall {
                     recall,
                     occurred_at,
@@ -515,19 +536,54 @@ impl OnlineRuntime {
         Ok(())
     }
 
-    fn publish_message(
+    async fn publish_message(
         &mut self,
         message: super::push::DecodedMessage,
+        context: &mut OnlineContext<'_>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let segment_count = message.rich_text().map_or(0, |body| body.elements().len());
+        let group_file = message.rich_text().and_then(|body| {
+            body.elements()
+                .iter()
+                .find_map(|element| match element.segment() {
+                    qq_message::Segment::File(file) => Some(file.clone()),
+                    _ => None,
+                })
+        });
         let (envelope, rich_text) = message.into_parts();
         let message_class = envelope.class();
+        let group_route = envelope
+            .route()
+            .group_uin
+            .map(|group_id| (group_id, envelope.route().from_uin));
+        let occurred_at = u64::try_from(envelope.timestamp()).unwrap_or_default();
         let message =
             self.messages
                 .retain_decoded(&self.identity, envelope, rich_text, now_ms()?)?;
         let _delivered = self
             .events
             .publish(AccountEvent::Message(Box::new(message)));
+        if let (Some(file), Some((group_id, sender_id))) = (group_file, group_route) {
+            match super::group_files::resolve_notice(
+                &self.identity,
+                group_id,
+                sender_id,
+                &file,
+                occurred_at,
+                &self.packets,
+                &self.pushes,
+                context,
+            )
+            .await
+            {
+                Ok(file) => {
+                    let _delivered = self.events.publish(AccountEvent::GroupFile(Box::new(file)));
+                }
+                Err(_error) => eprintln!(
+                    "Lirvena retained no OneBot group-file notice because QQ did not issue a validated download URL"
+                ),
+            }
+        }
         eprintln!(
             "Lirvena received authenticated QQ {message_class:?} message with \
              {segment_count} decoded segments"

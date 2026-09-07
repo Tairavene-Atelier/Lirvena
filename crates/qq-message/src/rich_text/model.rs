@@ -92,6 +92,8 @@ pub enum Segment {
     Video(super::VideoSegment),
     /// Incoming voice metadata.
     Voice(super::VoiceSegment),
+    /// Incoming group-file metadata.
+    File(GroupFileSegment),
     /// Incoming JSON rich content.
     Json(String),
     /// Incoming QQ location card.
@@ -106,6 +108,46 @@ pub enum Segment {
     Forward(ForwardSegment),
     /// A valid element without one unambiguous compiled projection yet.
     Unsupported,
+}
+
+/// Incoming QQ group-file metadata.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GroupFileSegment {
+    bus_id: u32,
+    file_id: String,
+    name: String,
+    size: u64,
+}
+
+impl GroupFileSegment {
+    pub(super) const fn new(bus_id: u32, file_id: String, name: String, size: u64) -> Self {
+        Self {
+            bus_id,
+            file_id,
+            name,
+            size,
+        }
+    }
+    /// Returns the QQ file bus identifier.
+    #[must_use]
+    pub const fn bus_id(&self) -> u32 {
+        self.bus_id
+    }
+    /// Returns the QQ file identifier.
+    #[must_use]
+    pub fn file_id(&self) -> &str {
+        &self.file_id
+    }
+    /// Returns the sender-provided file name.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    /// Returns the file size in bytes.
+    #[must_use]
+    pub const fn size(&self) -> u64 {
+        self.size
+    }
 }
 
 /// QQ resource identifier carried by a merged-forward message.

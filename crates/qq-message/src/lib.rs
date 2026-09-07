@@ -4,6 +4,7 @@ mod decoder;
 mod error;
 mod essence;
 mod event_payload;
+mod file_notice;
 mod friend_recall;
 mod friend_request;
 mod group_mute;
@@ -28,6 +29,7 @@ mod rich_text;
 pub use decoder::{MessageDecoder, MessageDisposition};
 pub use error::MessageDecodeError;
 pub use essence::{GroupEssence, decode_group_essence};
+pub use file_notice::{PrivateFileNotice, decode_private_file_notice};
 pub use friend_recall::{FriendRecall, decode_friend_recall};
 pub use friend_request::{FriendRequestSignal, decode_friend_request_signal};
 pub use group_mute::{GroupMute, decode_group_mute};
@@ -59,7 +61,8 @@ pub use recall::{
 pub use recall_response::{validate_group_recall_response, validate_private_recall_response};
 pub use request::{GroupRequestSignal, decode_group_request_signal};
 pub use rich_text::{
-    FaceKind, FaceSegment, ForwardSegment, ImageSegment, LocationSegment, MediaFile, MediaScope,
-    MentionSegment, MentionTarget, OpaqueAttachment, PokeSegment, ReplySegment, RichTextElement,
-    RichTextMessage, Segment, VideoSegment, VoiceSegment, XmlSegment, decode_rich_text,
+    FaceKind, FaceSegment, ForwardSegment, GroupFileSegment, ImageSegment, LocationSegment,
+    MediaFile, MediaScope, MentionSegment, MentionTarget, OpaqueAttachment, PokeSegment,
+    ReplySegment, RichTextElement, RichTextMessage, Segment, VideoSegment, VoiceSegment,
+    XmlSegment, decode_rich_text,
 };

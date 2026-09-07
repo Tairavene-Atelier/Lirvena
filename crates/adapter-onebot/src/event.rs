@@ -60,6 +60,8 @@ pub fn project_account_event(
         }
         AccountEvent::Poke(poke) => Ok(Some(project_poke(poke, id_format))),
         AccountEvent::GroupEssence(essence) => Ok(Some(project_group_essence(essence, id_format))),
+        AccountEvent::PrivateFile(file) => Ok(Some(project_private_file(file, id_format))),
+        AccountEvent::GroupFile(file) => Ok(Some(project_group_file(file, id_format))),
         AccountEvent::GroupRecall(recall) => Ok(Some(project_group_recall(recall, id_format))),
         AccountEvent::FriendRecall(recall) => Ok(Some(project_friend_recall(recall, id_format))),
         AccountEvent::GroupRequest(request) => Ok(Some(project_group_request(request, id_format))),
@@ -70,6 +72,41 @@ pub fn project_account_event(
             Ok(None)
         }
     }
+}
+
+fn project_group_file(file: &account_api::ResolvedGroupFile, id_format: IdFormat) -> Value {
+    json!({
+        "time": file.occurred_at(),
+        "self_id": id_format.value(file.account().qq_id()),
+        "post_type": "notice",
+        "notice_type": "group_upload",
+        "group_id": id_format.value(file.group_id()),
+        "user_id": id_format.value(file.sender_id()),
+        "file": {
+            "id": file.file_id(),
+            "name": file.name(),
+            "size": file.size(),
+            "busid": file.bus_id(),
+            "url": file.url()
+        }
+    })
+}
+
+fn project_private_file(file: &account_api::ResolvedPrivateFile, id_format: IdFormat) -> Value {
+    json!({
+        "time": file.occurred_at(),
+        "self_id": id_format.value(file.account().qq_id()),
+        "post_type": "notice",
+        "notice_type": "offline_file",
+        "user_id": id_format.value(file.sender_id()),
+        "file": {
+            "id": file.file_id(),
+            "name": file.name(),
+            "size": file.size(),
+            "url": file.url(),
+            "hash": file.hash()
+        }
+    })
 }
 
 fn project_group_essence(
@@ -470,6 +507,10 @@ fn segment_json(element: &qq_message::RichTextElement, reply_id: Option<u32>) ->
         Segment::Image(image) => media_segment("image", image.file()),
         Segment::Video(video) => media_segment("video", video.file()),
         Segment::Voice(voice) => media_segment("record", voice.file()),
+        Segment::File(file) => json!({
+            "type": "file",
+            "data": {"file": file.file_id(), "name": file.name(), "size": file.size()}
+        }),
         Segment::Json(body) => json!({"type": "json", "data": {"data": body}}),
         Segment::Location(location) => json!({
             "type": "location",
@@ -536,6 +577,7 @@ fn raw_segment(element: &qq_message::RichTextElement, reply_id: Option<u32>) -> 
         Segment::Image(_) => "[CQ:image]".to_owned(),
         Segment::Video(_) => "[CQ:video]".to_owned(),
         Segment::Voice(_) => "[CQ:record]".to_owned(),
+        Segment::File(_) => "[CQ:file]".to_owned(),
         Segment::Json(_) => "[CQ:json]".to_owned(),
         Segment::Location(location) => format!(
             "[CQ:location,lat={},lon={},title={},content={}]",

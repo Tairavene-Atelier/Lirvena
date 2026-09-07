@@ -70,6 +70,12 @@ fn decode_element(encoded: Vec<u8>) -> Result<RichTextElement, MessageDecodeErro
             .as_deref()
             .map(super::media_legacy::decode_direct_image)
             .transpose()?,
+        wire.transfer
+            .as_deref()
+            .map(super::group_file::decode)
+            .transpose()?
+            .flatten()
+            .map(Segment::File),
         wire.group_image
             .as_deref()
             .map(super::media_legacy::decode_group_image)

@@ -4,6 +4,7 @@
 mod action;
 mod essence;
 mod event;
+mod file_notice;
 mod friend_recall;
 mod friend_request;
 mod group;
@@ -21,6 +22,7 @@ pub use action::{
 };
 pub use essence::ResolvedGroupEssence;
 pub use event::{AccountEvent, AccountIdentity, InboundMessage};
+pub use file_notice::{ResolvedGroupFile, ResolvedPrivateFile};
 pub use friend_recall::ResolvedFriendRecall;
 pub use friend_request::{FriendRequestReference, ResolvedFriendRequest};
 pub use group::{ResolvedGroupNotice, ResolvedGroupNoticeKind};
