@@ -80,6 +80,17 @@ pub(super) async fn execute_account_action(
             )
             .await
         }
+        "get_music_ark" => {
+            super::music_ark::get(
+                request,
+                identity.qq_id(),
+                packets,
+                pushes,
+                resources.tickets,
+                context,
+            )
+            .await
+        }
         "set_group_bot_status" | "send_group_bot_callback" => {
             super::group_bot::execute(request, packets, pushes, context).await
         }

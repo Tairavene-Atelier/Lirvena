@@ -15,6 +15,7 @@ mod long_message;
 mod media;
 mod message_recall;
 mod message_registry;
+mod music_ark;
 mod notices;
 mod packets;
 mod parameters;

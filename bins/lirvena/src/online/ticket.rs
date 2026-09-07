@@ -140,6 +140,21 @@ impl TicketRuntime {
         Ok(csrf_token(&skey))
     }
 
+    pub(super) async fn cookie_header(
+        &mut self,
+        domain: &str,
+        access: TicketAccess<'_, '_>,
+    ) -> Result<String, AccountActionError> {
+        self.cookies(
+            domain,
+            access.uin,
+            access.packets,
+            access.pushes,
+            access.online,
+        )
+        .await
+    }
+
     pub(super) async fn authenticated_request(
         &mut self,
         method: Method,
@@ -157,6 +172,24 @@ impl TicketRuntime {
             )
             .await?;
         Ok(self.client.request(method, url).header("cookie", cookies))
+    }
+
+    pub(super) async fn authenticated_request_with_cookie_suffix(
+        &mut self,
+        method: Method,
+        url: Url,
+        domain: &str,
+        access: TicketAccess<'_, '_>,
+        suffix: &str,
+    ) -> Result<RequestBuilder, AccountActionError> {
+        if suffix.is_empty() || suffix.chars().any(char::is_control) {
+            return Err(AccountActionError::BadParameters);
+        }
+        let cookies = self.cookie_header(domain, access).await?;
+        Ok(self
+            .client
+            .request(method, url)
+            .header("cookie", format!("{cookies}; {suffix}")))
     }
 
     pub(super) async fn bounded_body(
