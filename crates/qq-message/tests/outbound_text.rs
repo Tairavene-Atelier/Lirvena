@@ -180,6 +180,39 @@ fn group_mentions_and_classic_face_keep_wire_order() -> Result<(), Box<dyn std::
 }
 
 #[test]
+fn modern_standard_and_animated_faces_use_distinct_common_elements()
+-> Result<(), Box<dyn std::error::Error>> {
+    let encoded = encode_message(&SendMessageInput {
+        target: SendTextTarget::Group { group_code: 7 },
+        segments: &[
+            OutboundSegment::Face(301),
+            OutboundSegment::AnimatedFace(358),
+        ],
+        client_sequence: 8,
+        random: 9,
+        unix_seconds: 10,
+    })?;
+    let elements = TestMessage::decode(encoded.as_slice())?
+        .body
+        .and_then(|body| body.rich_text)
+        .ok_or("missing rich text")?
+        .elements;
+    let standard = elements[0].common.as_ref().ok_or("standard face")?;
+    assert_eq!((standard.service_type, standard.business_type), (33, 1));
+    assert_eq!(
+        TestStandardFace::decode(standard.protobuf.as_slice())?.face_id,
+        301
+    );
+    let animated = elements[1].common.as_ref().ok_or("animated face")?;
+    assert_eq!((animated.service_type, animated.business_type), (37, 1));
+    let animated = TestAnimatedFace::decode(animated.protobuf.as_slice())?;
+    assert_eq!(animated.face, 358);
+    assert_eq!(animated.pack, "1");
+    assert_eq!(animated.sticker, "8");
+    Ok(())
+}
+
+#[test]
 fn image_uses_legacy_then_modern_elements_without_reencoding()
 -> Result<(), Box<dyn std::error::Error>> {
     let segments = [OutboundSegment::Image {
@@ -567,6 +600,22 @@ struct TestText {
 struct TestFace {
     #[prost(int32, optional, tag = "1")]
     index: Option<i32>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestStandardFace {
+    #[prost(uint32, tag = "1")]
+    face_id: u32,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TestAnimatedFace {
+    #[prost(string, tag = "1")]
+    pack: String,
+    #[prost(string, tag = "2")]
+    sticker: String,
+    #[prost(int32, tag = "3")]
+    face: i32,
 }
 
 #[derive(Clone, PartialEq, Message)]

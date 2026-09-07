@@ -335,6 +335,16 @@ fn segment_json(element: &qq_message::RichTextElement, reply_id: Option<u32>) ->
             };
             json!({"type": "at", "data": {"qq": qq}})
         }
+        Segment::Face(face)
+            if face.kind() == qq_message::FaceKind::Animated && face.id() == 358 =>
+        {
+            json!({"type": "dice", "data": {}})
+        }
+        Segment::Face(face)
+            if face.kind() == qq_message::FaceKind::Animated && face.id() == 359 =>
+        {
+            json!({"type": "rps", "data": {}})
+        }
         Segment::Face(face) => json!({"type": "face", "data": {"id": face.id()}}),
         Segment::MarketFace(face) => json!({
             "type": "mface",
@@ -391,6 +401,16 @@ fn raw_segment(element: &qq_message::RichTextElement, reply_id: Option<u32>) -> 
     match element.segment() {
         Segment::Text(text) => text.clone(),
         Segment::Mention(mention) => format!("@{}", mention.display()),
+        Segment::Face(face)
+            if face.kind() == qq_message::FaceKind::Animated && face.id() == 358 =>
+        {
+            "[CQ:dice]".to_owned()
+        }
+        Segment::Face(face)
+            if face.kind() == qq_message::FaceKind::Animated && face.id() == 359 =>
+        {
+            "[CQ:rps]".to_owned()
+        }
         Segment::Face(face) => format!("[CQ:face,id={}]", face.id()),
         Segment::MarketFace(_) => "[CQ:mface]".to_owned(),
         Segment::Image(_) => "[CQ:image]".to_owned(),

@@ -65,8 +65,10 @@ pub enum OutboundSegment<'a> {
         /// Human-readable preview carried by QQ.
         display: &'a str,
     },
-    /// One classic QQ face identifier.
+    /// One ordinary QQ face identifier, using the legacy or modern standard representation.
     Face(u16),
+    /// One animated QQ face identifier encoded through the large-face common element.
+    AnimatedFace(u16),
     /// One QQ marketplace face using caller-supplied authenticated material.
     MarketFace {
         /// Hexadecimal marketplace emoji identifier.
@@ -376,12 +378,8 @@ fn compile_elements(
                     .ok_or(MessageDecodeError)?;
                 Ok(vec![mention_element(display, 2, *uin, uid)])
             }
-            OutboundSegment::Face(id) if *id < 260 => Ok(vec![Element {
-                face: Some(Face {
-                    index: Some(i32::from(*id)),
-                }),
-                ..Element::default()
-            }]),
+            OutboundSegment::Face(id) => Ok(vec![face_element(*id)]),
+            OutboundSegment::AnimatedFace(id) if *id >= 260 => Ok(vec![animated_face_element(*id)]),
             OutboundSegment::MarketFace {
                 emoji_id,
                 package_id,
@@ -488,7 +486,7 @@ fn compile_elements(
             OutboundSegment::Text(_)
             | OutboundSegment::MentionEveryone { .. }
             | OutboundSegment::Mention { .. }
-            | OutboundSegment::Face(_)
+            | OutboundSegment::AnimatedFace(_)
             | OutboundSegment::Image { .. }
             | OutboundSegment::Record { .. }
             | OutboundSegment::Video { .. }
@@ -520,6 +518,45 @@ fn mention_element(display: &str, kind: i32, uin: u32, uid: &str) -> Element {
         }),
         ..Element::default()
     }
+}
+
+fn face_element(id: u16) -> Element {
+    if id < 260 {
+        return Element {
+            face: Some(Face {
+                index: Some(i32::from(id)),
+            }),
+            ..Element::default()
+        };
+    }
+    common_element(
+        33,
+        1,
+        StandardFace {
+            face_id: u32::from(id),
+            text: String::new(),
+            compatibility_text: String::new(),
+        }
+        .encode_to_vec(),
+    )
+}
+
+fn animated_face_element(id: u16) -> Element {
+    common_element(
+        37,
+        1,
+        AnimatedFace {
+            sticker_pack_id: "1".to_owned(),
+            sticker_id: "8".to_owned(),
+            face_id: i32::from(id),
+            field_four: 1,
+            sticker_type: 1,
+            field_six: String::new(),
+            preview: String::new(),
+            field_nine: 1,
+        }
+        .encode_to_vec(),
+    )
 }
 
 fn image_elements(group: bool, message_info: &[u8], compatibility: &[u8]) -> Vec<Element> {
@@ -765,6 +802,36 @@ struct Text {
 struct Face {
     #[prost(int32, optional, tag = "1")]
     index: Option<i32>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct StandardFace {
+    #[prost(uint32, tag = "1")]
+    face_id: u32,
+    #[prost(string, tag = "2")]
+    text: String,
+    #[prost(string, tag = "3")]
+    compatibility_text: String,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct AnimatedFace {
+    #[prost(string, tag = "1")]
+    sticker_pack_id: String,
+    #[prost(string, tag = "2")]
+    sticker_id: String,
+    #[prost(int32, tag = "3")]
+    face_id: i32,
+    #[prost(int32, tag = "4")]
+    field_four: i32,
+    #[prost(int32, tag = "5")]
+    sticker_type: i32,
+    #[prost(string, tag = "6")]
+    field_six: String,
+    #[prost(string, tag = "7")]
+    preview: String,
+    #[prost(int32, tag = "9")]
+    field_nine: i32,
 }
 
 #[derive(Clone, PartialEq, Message)]

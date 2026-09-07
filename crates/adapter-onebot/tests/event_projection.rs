@@ -207,6 +207,9 @@ fn rich_segments_project_to_standard_onebot_shapes() -> TestResult {
     let encoded = encode_message(&SendMessageInput {
         target: SendTextTarget::Group { group_code: 88 },
         segments: &[
+            OutboundSegment::Face(301),
+            OutboundSegment::AnimatedFace(358),
+            OutboundSegment::AnimatedFace(359),
             OutboundSegment::Json("{\"app\":\"demo\"}"),
             OutboundSegment::Xml {
                 body: "<msg/>",
@@ -245,6 +248,9 @@ fn rich_segments_project_to_standard_onebot_shapes() -> TestResult {
     assert_eq!(
         projected["message"],
         json!([
+            {"type": "face", "data": {"id": 301}},
+            {"type": "dice", "data": {}},
+            {"type": "rps", "data": {}},
             {"type": "json", "data": {"data": "{\"app\":\"demo\"}"}},
             {"type": "xml", "data": {"data": "<msg/>", "service_id": 35}},
             {"type": "forward", "data": {"id": "forward-1"}},
@@ -263,7 +269,7 @@ fn rich_segments_project_to_standard_onebot_shapes() -> TestResult {
     );
     assert_eq!(
         projected["raw_message"],
-        "[CQ:json][CQ:xml][CQ:forward,id=forward-1][CQ:poke,type=2,strength=7][CQ:mface]"
+        "[CQ:face,id=301][CQ:dice][CQ:rps][CQ:json][CQ:xml][CQ:forward,id=forward-1][CQ:poke,type=2,strength=7][CQ:mface]"
     );
     Ok(())
 }

@@ -446,6 +446,7 @@ pub(super) enum CompiledSegment {
         display: String,
     },
     Face(u16),
+    AnimatedFace(u16),
     MarketFace {
         emoji_id: String,
         package_id: i32,
@@ -500,6 +501,7 @@ impl CompiledSegment {
                 display,
             },
             Self::Face(value) => OutboundSegment::Face(*value),
+            Self::AnimatedFace(value) => OutboundSegment::AnimatedFace(*value),
             Self::MarketFace {
                 emoji_id,
                 package_id,
@@ -566,6 +568,7 @@ impl CompiledSegment {
             Self::Text(value) => value,
             Self::MentionEveryone { display } | Self::Mention { display, .. } => display,
             Self::Face(_) => "[表情]",
+            Self::AnimatedFace(_) => "[动画表情]",
             Self::MarketFace { summary, .. } => summary,
             Self::Image { .. } => "[图片]",
             Self::Record { .. } => "[语音]",
@@ -583,7 +586,11 @@ impl CompiledSegment {
             Self::Text(value) => json!({"type": "text", "data": {"text": value}}),
             Self::MentionEveryone { .. } => json!({"type": "at", "data": {"qq": "all"}}),
             Self::Mention { uin, .. } => json!({"type": "at", "data": {"qq": uin}}),
-            Self::Face(value) => json!({"type": "face", "data": {"id": value}}),
+            Self::AnimatedFace(358) => json!({"type": "dice", "data": {}}),
+            Self::AnimatedFace(359) => json!({"type": "rps", "data": {}}),
+            Self::Face(value) | Self::AnimatedFace(value) => {
+                json!({"type": "face", "data": {"id": value}})
+            }
             Self::MarketFace {
                 emoji_id,
                 package_id,
@@ -734,6 +741,8 @@ async fn compile_segment(
             .and_then(|value| u16::try_from(value).ok())
             .map(CompiledSegment::Face)
             .ok_or(AccountActionError::BadParameters),
+        "dice" => Ok(CompiledSegment::AnimatedFace(358)),
+        "rps" => Ok(CompiledSegment::AnimatedFace(359)),
         "mface" => compile_market_face(segment),
         "at" if matches!(target, SendTextTarget::Group { .. }) => {
             let target = segment
