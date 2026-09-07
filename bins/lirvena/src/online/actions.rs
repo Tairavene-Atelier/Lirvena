@@ -586,10 +586,11 @@ impl CompiledSegment {
             Self::Text(value) => json!({"type": "text", "data": {"text": value}}),
             Self::MentionEveryone { .. } => json!({"type": "at", "data": {"qq": "all"}}),
             Self::Mention { uin, .. } => json!({"type": "at", "data": {"qq": uin}}),
-            Self::Face(value) => json!({"type": "face", "data": {"id": value}}),
             Self::AnimatedFace(358) => json!({"type": "dice", "data": {}}),
             Self::AnimatedFace(359) => json!({"type": "rps", "data": {}}),
-            Self::AnimatedFace(value) => json!({"type": "face", "data": {"id": value}}),
+            Self::Face(value) | Self::AnimatedFace(value) => {
+                json!({"type": "face", "data": {"id": value}})
+            }
             Self::MarketFace {
                 emoji_id,
                 package_id,
