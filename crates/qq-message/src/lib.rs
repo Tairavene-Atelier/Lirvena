@@ -2,9 +2,11 @@
 
 mod decoder;
 mod error;
+mod event_payload;
 mod friend_recall;
 mod friend_request;
 mod group_mute;
+mod group_name;
 mod group_recall;
 mod history;
 mod long_message;
@@ -26,6 +28,7 @@ pub use error::MessageDecodeError;
 pub use friend_recall::{FriendRecall, decode_friend_recall};
 pub use friend_request::{FriendRequestSignal, decode_friend_request_signal};
 pub use group_mute::{GroupMute, decode_group_mute};
+pub use group_name::{GroupNameChange, decode_group_name_change};
 pub use group_recall::{GroupRecall, decode_group_recalls};
 pub use history::{
     FRIEND_HISTORY_ROUTE, GROUP_HISTORY_ROUTE, HistoricalMessage, decode_friend_history_response,

@@ -55,6 +55,9 @@ pub fn project_account_event(
             Ok(Some(project_group_reaction(reaction, id_format)))
         }
         AccountEvent::GroupMute(mute) => Ok(Some(project_group_mute(mute, id_format))),
+        AccountEvent::GroupNameChange(change) => {
+            Ok(Some(project_group_name_change(change, id_format)))
+        }
         AccountEvent::GroupRecall(recall) => Ok(Some(project_group_recall(recall, id_format))),
         AccountEvent::FriendRecall(recall) => Ok(Some(project_friend_recall(recall, id_format))),
         AccountEvent::GroupRequest(request) => Ok(Some(project_group_request(request, id_format))),
@@ -65,6 +68,20 @@ pub fn project_account_event(
             Ok(None)
         }
     }
+}
+
+fn project_group_name_change(
+    change: &account_api::ResolvedGroupNameChange,
+    id_format: IdFormat,
+) -> Value {
+    json!({
+        "time": change.occurred_at(),
+        "self_id": id_format.value(change.account().qq_id()),
+        "post_type": "notice",
+        "notice_type": "group_name_change",
+        "group_id": id_format.value(change.group_id()),
+        "name": change.name()
+    })
 }
 
 fn project_friend_recall(recall: &account_api::ResolvedFriendRecall, id_format: IdFormat) -> Value {

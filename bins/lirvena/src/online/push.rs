@@ -3,10 +3,11 @@ use std::io;
 
 use qq_login::CredentialLogin;
 use qq_message::{
-    FriendRecall, FriendRequestSignal, GroupMute, GroupNotice, GroupReaction, GroupRecall,
-    GroupRequestSignal, MessageDecoder, MessageDisposition, MessageEnvelope, RichTextMessage,
-    decode_friend_recall, decode_friend_request_signal, decode_group_mute, decode_group_notice,
-    decode_group_reaction, decode_group_recalls, decode_group_request_signal, decode_rich_text,
+    FriendRecall, FriendRequestSignal, GroupMute, GroupNameChange, GroupNotice, GroupReaction,
+    GroupRecall, GroupRequestSignal, MessageDecoder, MessageDisposition, MessageEnvelope,
+    RichTextMessage, decode_friend_recall, decode_friend_request_signal, decode_group_mute,
+    decode_group_name_change, decode_group_notice, decode_group_reaction, decode_group_recalls,
+    decode_group_request_signal, decode_rich_text,
 };
 use qq_online::{PushOutcome, PushProcessor};
 use qq_profile::{LinuxNtProfile, PushPlan, decode_push_plan};
@@ -52,6 +53,11 @@ pub(super) enum DecodedPush {
         occurred_at: u64,
         encoded_len: usize,
     },
+    GroupNameChange {
+        change: GroupNameChange,
+        occurred_at: u64,
+        encoded_len: usize,
+    },
     GroupRecall {
         recall: GroupRecall,
         occurred_at: u64,
@@ -80,6 +86,7 @@ impl DecodedPush {
             Self::GroupNotice { encoded_len, .. }
             | Self::GroupReaction { encoded_len, .. }
             | Self::GroupMute { encoded_len, .. }
+            | Self::GroupNameChange { encoded_len, .. }
             | Self::GroupRecall { encoded_len, .. }
             | Self::FriendRecall { encoded_len, .. }
             | Self::GroupRequest { encoded_len, .. }
@@ -250,6 +257,18 @@ impl PushRuntime {
                 .ok_or_else(|| io::Error::other("message queue byte count overflow"))?;
             self.events.push_back(DecodedPush::GroupReaction {
                 reaction,
+                occurred_at: u64::try_from(envelope.timestamp()).unwrap_or_default(),
+                encoded_len,
+            });
+            return Ok(());
+        }
+        if let Some(change) = decode_group_name_change(&envelope)? {
+            self.queued_message_bytes = self
+                .queued_message_bytes
+                .checked_add(encoded_len)
+                .ok_or_else(|| io::Error::other("message queue byte count overflow"))?;
+            self.events.push_back(DecodedPush::GroupNameChange {
+                change,
                 occurred_at: u64::try_from(envelope.timestamp()).unwrap_or_default(),
                 encoded_len,
             });

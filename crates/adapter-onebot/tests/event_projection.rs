@@ -519,6 +519,28 @@ fn friend_recall_uses_retained_message_id() -> TestResult {
     Ok(())
 }
 
+#[test]
+fn group_name_change_preserves_the_authenticated_name() -> TestResult {
+    let event = AccountEvent::GroupNameChange(Box::new(account_api::ResolvedGroupNameChange::new(
+        identity()?,
+        88,
+        "new name".to_owned(),
+        1_800_000_000,
+    )?));
+    assert_eq!(
+        project_account_event(&event, IdFormat::String)?.ok_or("missing name change")?,
+        json!({
+            "time": 1_800_000_000,
+            "self_id": "10001",
+            "post_type": "notice",
+            "notice_type": "group_name_change",
+            "group_id": "88",
+            "name": "new name"
+        })
+    );
+    Ok(())
+}
+
 fn event(
     message_type: u32,
     group: Option<(u32, &str)>,

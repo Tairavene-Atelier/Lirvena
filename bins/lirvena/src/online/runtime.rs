@@ -325,6 +325,22 @@ impl OnlineRuntime {
                         ),
                     }
                 }
+                DecodedPush::GroupNameChange {
+                    change,
+                    occurred_at,
+                    ..
+                } => {
+                    if let Ok(change) = account_api::ResolvedGroupNameChange::new(
+                        self.identity.clone(),
+                        u64::from(change.group_id()),
+                        change.name().to_owned(),
+                        occurred_at,
+                    ) {
+                        let _delivered = self
+                            .events
+                            .publish(AccountEvent::GroupNameChange(Box::new(change)));
+                    }
+                }
                 DecodedPush::GroupRecall {
                     recall,
                     occurred_at,
