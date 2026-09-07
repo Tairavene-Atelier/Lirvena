@@ -541,6 +541,41 @@ fn group_name_change_preserves_the_authenticated_name() -> TestResult {
     Ok(())
 }
 
+#[test]
+fn friend_and_group_pokes_keep_lagrange_compatible_fields() -> TestResult {
+    let friend = AccountEvent::Poke(Box::new(account_api::ResolvedPoke::new(
+        identity()?,
+        account_api::ResolvedPokeScope::Friend,
+        42,
+        7,
+        "poke".to_owned(),
+        "once".to_owned(),
+        "image".to_owned(),
+        1_800_000_000,
+    )?));
+    let value = project_account_event(&friend, IdFormat::String)?.ok_or("missing friend poke")?;
+    assert_eq!(value["notice_type"], "notify");
+    assert_eq!(value["sub_type"], "poke");
+    assert_eq!(value["sender_id"], "42");
+    assert!(value.get("group_id").is_none());
+
+    let group = AccountEvent::Poke(Box::new(account_api::ResolvedPoke::new(
+        identity()?,
+        account_api::ResolvedPokeScope::Group(88),
+        42,
+        7,
+        "poke".to_owned(),
+        "once".to_owned(),
+        "image".to_owned(),
+        1_800_000_000,
+    )?));
+    let value = project_account_event(&group, IdFormat::Number)?.ok_or("missing group poke")?;
+    assert_eq!(value["group_id"], 88);
+    assert_eq!(value["user_id"], 42);
+    assert!(value.get("sender_id").is_none());
+    Ok(())
+}
+
 fn event(
     message_type: u32,
     group: Option<(u32, &str)>,

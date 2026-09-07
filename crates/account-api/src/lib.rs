@@ -10,6 +10,7 @@ mod group_mute;
 mod group_name;
 mod group_recall;
 mod hub;
+mod poke;
 mod reaction;
 mod request;
 
@@ -25,5 +26,6 @@ pub use group_mute::ResolvedGroupMute;
 pub use group_name::ResolvedGroupNameChange;
 pub use group_recall::ResolvedGroupRecall;
 pub use hub::{AccountEventHub, AccountEventPublisher, AccountEventSubscription, EventHubError};
+pub use poke::{ResolvedPoke, ResolvedPokeScope};
 pub use reaction::ResolvedGroupReaction;
 pub use request::{GroupRequestKind, GroupRequestReference, ResolvedGroupRequest};

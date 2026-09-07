@@ -14,6 +14,7 @@ mod market_face;
 mod model;
 mod notice;
 mod outbound;
+mod poke;
 mod proto;
 mod reaction;
 mod read_report;
@@ -47,6 +48,7 @@ pub use outbound::{
     encode_private_file_message, encode_text_message, parse_send_message_response,
     validate_private_file_message_response,
 };
+pub use poke::{PokeNotice, PokeScope, decode_poke_notice};
 pub use reaction::{GroupReaction, decode_group_reaction};
 pub use read_report::{ReadReportInput, encode_read_report, validate_read_report_response};
 pub use recall::{

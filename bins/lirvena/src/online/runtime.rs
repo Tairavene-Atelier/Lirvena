@@ -341,6 +341,28 @@ impl OnlineRuntime {
                             .publish(AccountEvent::GroupNameChange(Box::new(change)));
                     }
                 }
+                DecodedPush::Poke {
+                    poke, occurred_at, ..
+                } => {
+                    let scope = match poke.scope() {
+                        qq_message::PokeScope::Friend => account_api::ResolvedPokeScope::Friend,
+                        qq_message::PokeScope::Group(group_id) => {
+                            account_api::ResolvedPokeScope::Group(u64::from(group_id))
+                        }
+                    };
+                    if let Ok(poke) = account_api::ResolvedPoke::new(
+                        self.identity.clone(),
+                        scope,
+                        u64::from(poke.operator_id()),
+                        u64::from(poke.target_id()),
+                        poke.action().to_owned(),
+                        poke.suffix().to_owned(),
+                        poke.image_url().to_owned(),
+                        occurred_at,
+                    ) {
+                        let _delivered = self.events.publish(AccountEvent::Poke(Box::new(poke)));
+                    }
+                }
                 DecodedPush::GroupRecall {
                     recall,
                     occurred_at,
