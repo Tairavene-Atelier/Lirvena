@@ -303,6 +303,28 @@ impl OnlineRuntime {
                         ),
                     }
                 }
+                DecodedPush::GroupMute {
+                    mute, occurred_at, ..
+                } => {
+                    match notices::resolve_group_mute(
+                        &self.identity,
+                        &self.packets,
+                        &self.pushes,
+                        mute,
+                        occurred_at,
+                        context,
+                    )
+                    .await
+                    {
+                        Some(mute) => {
+                            let _delivered =
+                                self.events.publish(AccountEvent::GroupMute(Box::new(mute)));
+                        }
+                        None => eprintln!(
+                            "Lirvena retained no OneBot group mute because its authenticated UID could not be resolved"
+                        ),
+                    }
+                }
                 DecodedPush::GroupRequest {
                     signal,
                     occurred_at,

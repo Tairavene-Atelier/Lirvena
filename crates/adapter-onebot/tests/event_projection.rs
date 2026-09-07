@@ -2,8 +2,8 @@
 
 use account_api::{
     AccountEvent, AccountIdentity, FriendRequestReference, GroupRequestKind, GroupRequestReference,
-    InboundMessage, ResolvedFriendRequest, ResolvedGroupNotice, ResolvedGroupNoticeKind,
-    ResolvedGroupReaction, ResolvedGroupRequest,
+    InboundMessage, ResolvedFriendRequest, ResolvedGroupMute, ResolvedGroupNotice,
+    ResolvedGroupNoticeKind, ResolvedGroupReaction, ResolvedGroupRequest,
 };
 use account_runtime::AccountLocalId;
 use adapter_onebot::{IdFormat, project_account_event, project_message_record};
@@ -411,6 +411,56 @@ fn group_reaction_uses_lagrange_compatible_notice_shape() -> TestResult {
             "message_id": "91",
             "likes": [{"emoji_id": "14", "count": 3}],
             "is_add": true
+        })
+    );
+    Ok(())
+}
+
+#[test]
+fn group_mute_projects_member_and_whole_group_shapes() -> TestResult {
+    let member = AccountEvent::GroupMute(Box::new(ResolvedGroupMute::new(
+        identity()?,
+        88,
+        Some(7),
+        Some(42),
+        600,
+        1_800_000_000,
+    )?));
+    assert_eq!(
+        project_account_event(&member, IdFormat::String)?.ok_or("missing member mute")?,
+        json!({
+            "time": 1_800_000_000,
+            "self_id": "10001",
+            "post_type": "notice",
+            "notice_type": "group_ban",
+            "sub_type": "ban",
+            "group_id": "88",
+            "operator_id": "7",
+            "user_id": "42",
+            "duration": 600
+        })
+    );
+
+    let whole = AccountEvent::GroupMute(Box::new(ResolvedGroupMute::new(
+        identity()?,
+        88,
+        None,
+        None,
+        u32::MAX,
+        1_800_000_001,
+    )?));
+    assert_eq!(
+        project_account_event(&whole, IdFormat::Number)?.ok_or("missing whole mute")?,
+        json!({
+            "time": 1_800_000_001,
+            "self_id": 10001,
+            "post_type": "notice",
+            "notice_type": "group_ban",
+            "sub_type": "ban",
+            "group_id": 88,
+            "operator_id": 0,
+            "user_id": 0,
+            "duration": -1
         })
     );
     Ok(())
