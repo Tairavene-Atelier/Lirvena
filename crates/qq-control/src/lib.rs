@@ -16,6 +16,7 @@ mod poke;
 mod private_file;
 mod private_file_upload;
 mod reaction;
+mod ticket;
 
 pub use delete_friend::delete_friend;
 pub use essence::{delete_group_essence, set_group_essence};
@@ -43,6 +44,10 @@ pub use private_file_upload::{
     private_file_upload_request,
 };
 pub use reaction::{EmojiChainTarget, group_reaction, join_emoji_chain};
+pub use ticket::{
+    DomainTicket, client_key_request, domain_ticket_request, parse_client_key_response,
+    parse_domain_ticket_response,
+};
 
 const MAX_UID_BYTES: usize = 128;
 const MAX_TEXT_BYTES: usize = 4_096;
