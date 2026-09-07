@@ -5,6 +5,7 @@ mod directory;
 mod essence;
 mod face_asset;
 mod group_files;
+mod group_honor;
 mod group_notice;
 mod history;
 mod image;
