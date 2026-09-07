@@ -452,6 +452,12 @@ pub(super) enum CompiledSegment {
         wire: String,
         content: Value,
     },
+    Location {
+        latitude: String,
+        longitude: String,
+        title: String,
+        content: String,
+    },
     MarketFace {
         emoji_id: String,
         package_id: i32,
@@ -509,6 +515,17 @@ impl CompiledSegment {
             Self::AnimatedFace(value) => OutboundSegment::AnimatedFace(*value),
             Self::Markdown(value) => OutboundSegment::Markdown(value),
             Self::Keyboard { wire, .. } => OutboundSegment::Keyboard(wire),
+            Self::Location {
+                latitude,
+                longitude,
+                title,
+                content,
+            } => OutboundSegment::Location {
+                latitude,
+                longitude,
+                title,
+                content,
+            },
             Self::MarketFace {
                 emoji_id,
                 package_id,
@@ -578,6 +595,7 @@ impl CompiledSegment {
             Self::AnimatedFace(_) => "[动画表情]",
             Self::Markdown(_) => "[Markdown]",
             Self::Keyboard { .. } => "[Keyboard]",
+            Self::Location { .. } => "[位置]",
             Self::MarketFace { summary, .. } => summary,
             Self::Image { .. } => "[图片]",
             Self::Record { .. } => "[语音]",
@@ -604,6 +622,20 @@ impl CompiledSegment {
             Self::Keyboard { content, .. } => {
                 json!({"type": "keyboard", "data": {"content": content}})
             }
+            Self::Location {
+                latitude,
+                longitude,
+                title,
+                content,
+            } => json!({
+                "type": "location",
+                "data": {
+                    "lat": latitude,
+                    "lon": longitude,
+                    "title": title,
+                    "content": content
+                }
+            }),
             Self::MarketFace {
                 emoji_id,
                 package_id,
@@ -773,6 +805,30 @@ async fn compile_segment(
             Ok(CompiledSegment::Keyboard {
                 wire,
                 content: keyboard_content,
+            })
+        }
+        "location" => {
+            let latitude = segment_coordinate(segment.data().get("lat"), -90.0, 90.0)
+                .ok_or(AccountActionError::BadParameters)?;
+            let longitude = segment_coordinate(segment.data().get("lon"), -180.0, 180.0)
+                .ok_or(AccountActionError::BadParameters)?;
+            let title = segment
+                .data()
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            let location_content = segment
+                .data()
+                .get("content")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            Ok(CompiledSegment::Location {
+                latitude,
+                longitude,
+                title,
+                content: location_content,
             })
         }
         "mface" => compile_market_face(segment),
@@ -968,6 +1024,16 @@ fn segment_u32(value: Option<&Value>) -> Option<u32> {
         .and_then(|value| u32::try_from(value).ok())
 }
 
+fn segment_coordinate(value: Option<&Value>, minimum: f64, maximum: f64) -> Option<String> {
+    let coordinate = match value? {
+        Value::Number(number) => number.as_f64()?,
+        Value::String(value) => value.parse::<f64>().ok()?,
+        _ => return None,
+    };
+    (coordinate.is_finite() && (minimum..=maximum).contains(&coordinate))
+        .then(|| format!("{coordinate:.5}"))
+}
+
 #[cfg(test)]
 mod tests {
     use account_message_store::RecallTarget;
@@ -975,7 +1041,21 @@ mod tests {
     use qq_message::{OutboundSegment, SendTextTarget};
     use serde_json::json;
 
-    use super::{CompiledSegment, compile_market_face, quote_scope_matches};
+    use super::{CompiledSegment, compile_market_face, quote_scope_matches, segment_coordinate};
+
+    #[test]
+    fn location_coordinates_accept_onebot_number_or_string_and_are_normalized() {
+        assert_eq!(
+            segment_coordinate(Some(&json!(-27.4705)), -90.0, 90.0).as_deref(),
+            Some("-27.47050")
+        );
+        assert_eq!(
+            segment_coordinate(Some(&json!("153.026")), -180.0, 180.0).as_deref(),
+            Some("153.02600")
+        );
+        assert!(segment_coordinate(Some(&json!(91)), -90.0, 90.0).is_none());
+        assert!(segment_coordinate(Some(&json!("NaN")), -90.0, 90.0).is_none());
+    }
 
     #[test]
     fn marketplace_face_accepts_onebot_ids_and_has_a_stable_fallback_summary()

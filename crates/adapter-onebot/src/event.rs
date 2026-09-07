@@ -360,6 +360,15 @@ fn segment_json(element: &qq_message::RichTextElement, reply_id: Option<u32>) ->
         Segment::Video(video) => media_segment("video", video.file()),
         Segment::Voice(voice) => media_segment("record", voice.file()),
         Segment::Json(body) => json!({"type": "json", "data": {"data": body}}),
+        Segment::Location(location) => json!({
+            "type": "location",
+            "data": {
+                "lat": location.latitude(),
+                "lon": location.longitude(),
+                "title": location.title(),
+                "content": location.content()
+            }
+        }),
         Segment::Xml(xml) => json!({
             "type": "xml",
             "data": {"data": xml.body(), "service_id": xml.service_id()}
@@ -417,6 +426,13 @@ fn raw_segment(element: &qq_message::RichTextElement, reply_id: Option<u32>) -> 
         Segment::Video(_) => "[CQ:video]".to_owned(),
         Segment::Voice(_) => "[CQ:record]".to_owned(),
         Segment::Json(_) => "[CQ:json]".to_owned(),
+        Segment::Location(location) => format!(
+            "[CQ:location,lat={},lon={},title={},content={}]",
+            location.latitude(),
+            location.longitude(),
+            crate::message::escape_parameter(location.title()),
+            crate::message::escape_parameter(location.content())
+        ),
         Segment::Xml(_) => "[CQ:xml]".to_owned(),
         Segment::Poke(poke) => format!(
             "[CQ:poke,type={},strength={}]",

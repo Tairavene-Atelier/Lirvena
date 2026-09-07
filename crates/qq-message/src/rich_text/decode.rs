@@ -227,16 +227,22 @@ fn decode_rich_message(input: &[u8]) -> Result<Option<Segment>, MessageDecodeErr
 
 fn decode_light_app(input: &[u8]) -> Result<Option<Segment>, MessageDecodeError> {
     let wire = LightAppWire::decode(input).map_err(|_error| MessageDecodeError)?;
-    crate::rich_content::decompress(&wire.data).map(|body| {
-        Some(forward_from_json(&body).map_or_else(
-            || Segment::Json(body),
-            |resource_id| Segment::Forward(ForwardSegment::new(resource_id)),
-        ))
+    crate::rich_content::decompress(&wire.data).map(|body| Some(project_light_app(body)))
+}
+
+fn project_light_app(body: String) -> Segment {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&body) else {
+        return Segment::Json(body);
+    };
+    if let Some(location) = super::LocationSegment::from_light_app(&value) {
+        return Segment::Location(location);
+    }
+    forward_from_json_value(&value).map_or(Segment::Json(body), |resource_id| {
+        Segment::Forward(ForwardSegment::new(resource_id))
     })
 }
 
-fn forward_from_json(body: &str) -> Option<String> {
-    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+fn forward_from_json_value(value: &serde_json::Value) -> Option<String> {
     if value.get("app")?.as_str()? != "com.tencent.multimsg" {
         return None;
     }

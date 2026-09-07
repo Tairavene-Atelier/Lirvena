@@ -211,6 +211,12 @@ fn rich_segments_project_to_standard_onebot_shapes() -> TestResult {
             OutboundSegment::AnimatedFace(358),
             OutboundSegment::AnimatedFace(359),
             OutboundSegment::Json("{\"app\":\"demo\"}"),
+            OutboundSegment::Location {
+                latitude: "-27.47050",
+                longitude: "153.02600",
+                title: "A&B, [C]",
+                content: "Queensland",
+            },
             OutboundSegment::Xml {
                 body: "<msg/>",
                 service_id: 35,
@@ -252,6 +258,15 @@ fn rich_segments_project_to_standard_onebot_shapes() -> TestResult {
             {"type": "dice", "data": {}},
             {"type": "rps", "data": {}},
             {"type": "json", "data": {"data": "{\"app\":\"demo\"}"}},
+            {
+                "type": "location",
+                "data": {
+                    "lat": "-27.47050",
+                    "lon": "153.02600",
+                    "title": "A&B, [C]",
+                    "content": "Queensland"
+                }
+            },
             {"type": "xml", "data": {"data": "<msg/>", "service_id": 35}},
             {"type": "forward", "data": {"id": "forward-1"}},
             {"type": "poke", "data": {"type": 2, "strength": 7, "id": -1}},
@@ -269,7 +284,7 @@ fn rich_segments_project_to_standard_onebot_shapes() -> TestResult {
     );
     assert_eq!(
         projected["raw_message"],
-        "[CQ:face,id=301][CQ:dice][CQ:rps][CQ:json][CQ:xml][CQ:forward,id=forward-1][CQ:poke,type=2,strength=7][CQ:mface]"
+        "[CQ:face,id=301][CQ:dice][CQ:rps][CQ:json][CQ:location,lat=-27.47050,lon=153.02600,title=A&amp;B&#44; &#91;C&#93;,content=Queensland][CQ:xml][CQ:forward,id=forward-1][CQ:poke,type=2,strength=7][CQ:mface]"
     );
     Ok(())
 }

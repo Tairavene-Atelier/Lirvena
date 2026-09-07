@@ -434,6 +434,54 @@ fn json_xml_and_poke_use_distinct_qq_elements() -> Result<(), Box<dyn std::error
 }
 
 #[test]
+fn location_uses_the_qq_map_light_app_and_rejects_invalid_coordinates()
+-> Result<(), Box<dyn std::error::Error>> {
+    let segments = [OutboundSegment::Location {
+        latitude: "-27.47050",
+        longitude: "153.02600",
+        title: "Brisbane",
+        content: "Queensland",
+    }];
+    let encoded = encode_message(&SendMessageInput {
+        target: SendTextTarget::Group { group_code: 7 },
+        segments: &segments,
+        client_sequence: 8,
+        random: 9,
+        unix_seconds: 10,
+    })?;
+    let rich = TestMessage::decode(encoded.as_slice())?
+        .body
+        .and_then(|body| body.rich_text)
+        .ok_or("missing rich text")?;
+    let decoded = decode_rich_text(&rich.encode_to_vec())?;
+    let qq_message::Segment::Location(location) = decoded.elements()[0].segment() else {
+        return Err("expected location".into());
+    };
+    assert_eq!(location.latitude(), "-27.47050");
+    assert_eq!(location.longitude(), "153.02600");
+    assert_eq!(location.title(), "Brisbane");
+    assert_eq!(location.content(), "Queensland");
+
+    let invalid = [OutboundSegment::Location {
+        latitude: "91",
+        longitude: "153",
+        title: "invalid",
+        content: "invalid",
+    }];
+    assert!(
+        encode_message(&SendMessageInput {
+            target: SendTextTarget::Group { group_code: 7 },
+            segments: &invalid,
+            client_sequence: 8,
+            random: 9,
+            unix_seconds: 10,
+        })
+        .is_err()
+    );
+    Ok(())
+}
+
+#[test]
 fn group_reply_preserves_source_evidence_and_compatibility_mention()
 -> Result<(), Box<dyn std::error::Error>> {
     let original = vec![vec![0x0a, 0x02, 0x68, 0x69]];
