@@ -10,9 +10,11 @@ mod face_asset;
 mod friend_request;
 mod group_file;
 mod group_request;
+mod highway_file;
 mod image_ocr;
 mod poke;
 mod private_file;
+mod private_file_upload;
 mod reaction;
 
 pub use delete_friend::delete_friend;
@@ -36,6 +38,10 @@ pub use image_ocr::{
 };
 pub use poke::poke;
 pub use private_file::{parse_private_file_url_response, private_file_url};
+pub use private_file_upload::{
+    PrivateFileUploadPlan, PrivateFileUploadSpec, parse_private_file_upload_response,
+    private_file_upload_request,
+};
 pub use reaction::{EmojiChainTarget, group_reaction, join_emoji_chain};
 
 const MAX_UID_BYTES: usize = 128;

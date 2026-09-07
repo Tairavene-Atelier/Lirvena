@@ -3,6 +3,7 @@ use qq_wire::{decode_oidb_request, encode_oidb_request};
 
 use super::proto::UploadResponse;
 use super::*;
+use crate::highway_file::HighwayExtension;
 
 #[test]
 fn upload_and_completion_preserve_frozen_constants() -> Result<(), Box<dyn std::error::Error>> {
@@ -58,6 +59,7 @@ fn response_builds_bounded_highway_extension() -> Result<(), Box<dyn std::error:
     let plan = parse_group_file_upload_response(&response)?;
     let extension = plan.highway_extension(10001, 42, "a.bin", 3, &[5; 16])?;
     let decoded = HighwayExtension::decode(extension.as_slice())?;
+    assert_eq!(decoded.private_trailer, 0);
     let entry = decoded.entry.ok_or(ControlError)?;
     assert_eq!(entry.business.ok_or(ControlError)?.group, 42);
     assert_eq!(entry.file.ok_or(ControlError)?.check_key, vec![1, 2]);

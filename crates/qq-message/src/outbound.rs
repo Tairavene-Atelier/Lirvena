@@ -2,6 +2,12 @@ use prost::Message;
 
 use crate::MessageDecodeError;
 
+mod private_file;
+
+pub use private_file::{
+    PrivateFileMessageInput, encode_private_file_message, validate_private_file_message_response,
+};
+
 const MAX_TEXT_BYTES: usize = 4_500;
 const MAX_ELEMENTS: usize = 256;
 const MAX_DISPLAY_BYTES: usize = 1_024;
@@ -210,6 +216,7 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
                         uid: Some((*uid).to_owned()),
                     }),
                     group: None,
+                    transfer: None,
                 },
                 true,
             )
@@ -220,6 +227,7 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
                 group: Some(Group {
                     group_code: Some(*group_code),
                 }),
+                transfer: None,
             },
             false,
         ),
@@ -247,6 +255,7 @@ pub fn encode_message(input: &SendMessageInput<'_>) -> Result<Vec<u8>, MessageDe
         }),
         body: Some(MessageBody {
             rich_text: Some(RichText { elements }),
+            content: None,
         }),
         client_sequence: Some(input.client_sequence),
         random: Some(input.random),
@@ -595,6 +604,16 @@ struct RoutingHead {
     c2c: Option<C2c>,
     #[prost(message, optional, tag = "2")]
     group: Option<Group>,
+    #[prost(message, optional, tag = "15")]
+    transfer: Option<TransferRoute>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+struct TransferRoute {
+    #[prost(uint32, optional, tag = "2")]
+    command: Option<u32>,
+    #[prost(string, optional, tag = "8")]
+    uid: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -625,6 +644,8 @@ struct ContentHead {
 struct MessageBody {
     #[prost(message, optional, tag = "1")]
     rich_text: Option<RichText>,
+    #[prost(bytes = "vec", optional, tag = "2")]
+    content: Option<Vec<u8>>,
 }
 
 #[derive(Clone, PartialEq, Message)]

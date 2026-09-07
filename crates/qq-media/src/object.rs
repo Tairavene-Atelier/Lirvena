@@ -55,6 +55,12 @@ impl MediaObject {
         self.md5
     }
 
+    /// Returns the MD5 of at most the first `limit` bytes for QQ file negotiation.
+    #[must_use]
+    pub fn md5_prefix(&self, limit: usize) -> [u8; 16] {
+        Md5::digest(&self.bytes[..self.bytes.len().min(limit)]).into()
+    }
+
     /// Returns the immutable content SHA-1 required by QQ upload metadata.
     #[must_use]
     pub const fn sha1(&self) -> [u8; 20] {
@@ -75,5 +81,17 @@ impl core::fmt::Debug for MediaObject {
             .field("byte_len", &self.bytes.len())
             .field("source", &self.source)
             .finish_non_exhaustive()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MediaObject, MediaSourceKind};
+
+    #[test]
+    fn prefix_digest_is_bounded_and_matches_complete_digest_when_short() {
+        let object = MediaObject::new(vec![1, 2, 3, 4], MediaSourceKind::InlineBase64);
+        assert_eq!(object.md5_prefix(4), object.md5());
+        assert_ne!(object.md5_prefix(2), object.md5());
     }
 }
