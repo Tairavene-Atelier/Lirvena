@@ -1,12 +1,12 @@
 use prost::Message;
 use qq_wire::decode_oidb_response;
 
+use crate::highway_file::{HighwayFileExtensionSpec, encode_highway_file_extension};
 use crate::{ControlError, ControlRequest, request, request_reserved};
 
 use self::proto::{
-    CompleteBody, CompleteEnvelope, CompleteInfo, HighwayBusiness, HighwayClientInfo, HighwayEntry,
-    HighwayExtension, HighwayFile, HighwayFileName, HighwayHost, HighwayHostConfig, HighwayUrl,
-    UploadEnvelope, UploadRequest, UploadResponseEnvelope,
+    CompleteBody, CompleteEnvelope, CompleteInfo, UploadEnvelope, UploadRequest,
+    UploadResponseEnvelope,
 };
 
 mod proto;
@@ -76,45 +76,20 @@ impl GroupFileUploadPlan {
         {
             return Err(ControlError);
         }
-        let extension = HighwayExtension {
-            field1: 100,
-            field2: 1,
-            entry: Some(HighwayEntry {
-                business: Some(HighwayBusiness {
-                    sender: sender_uin,
-                    receiver: u64::from(group_uin),
-                    group: u64::from(group_uin),
-                }),
-                file: Some(HighwayFile {
-                    file_size,
-                    md5: md5.to_vec(),
-                    check_key: self.check_key.clone(),
-                    second_md5: md5.to_vec(),
-                    file_id: self.file_id.clone(),
-                    upload_key: self.upload_key.clone(),
-                }),
-                client: Some(HighwayClientInfo {
-                    client_type: 3,
-                    app_id: "100".to_owned(),
-                    terminal_type: 3,
-                    client_version: "1.1.1".to_owned(),
-                    field6: 4,
-                }),
-                name: Some(HighwayFileName {
-                    file_name: file_name.to_owned(),
-                }),
-                host: Some(HighwayHostConfig {
-                    hosts: vec![HighwayHost {
-                        url: Some(HighwayUrl {
-                            field1: 1,
-                            host: self.upload_host.clone(),
-                        }),
-                        port: self.upload_port,
-                    }],
-                }),
-            }),
-        }
-        .encode_to_vec();
+        let extension = encode_highway_file_extension(&HighwayFileExtensionSpec {
+            sender_uin,
+            receiver_uin: u64::from(group_uin),
+            group_uin: u64::from(group_uin),
+            file_size,
+            md5,
+            check_key: &self.check_key,
+            file_id: &self.file_id,
+            upload_key: &self.upload_key,
+            file_name,
+            upload_host: &self.upload_host,
+            upload_port: self.upload_port,
+            private_trailer: false,
+        });
         if extension.is_empty() || extension.len() > MAX_OPAQUE_BYTES {
             return Err(ControlError);
         }

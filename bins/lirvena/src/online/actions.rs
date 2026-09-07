@@ -184,6 +184,10 @@ pub(super) async fn execute_account_action(
         "get_private_file_url" => {
             super::private_file::download_url(request, packets, pushes, friends, context).await
         }
+        "upload_private_file" => {
+            super::private_file::upload(request, packets, pushes, friends, resources.media, context)
+                .await
+        }
         "upload_group_file" => {
             super::group_files::upload(request, resources.media, packets, pushes, context).await
         }

@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use super::controls::{send_control, send_control_response};
 use super::media::MediaRuntime;
 use super::packets::PacketRuntime;
-use super::parameters::{required_text, required_u32};
+use super::parameters::{file_name, required_text, required_u32};
 use super::push::PushRuntime;
 use super::runtime::OnlineContext;
 use crate::support::random_nonzero_u32;
@@ -31,12 +31,7 @@ pub(super) async fn upload(
     let group_uin = required_u32(params.get("group_id"))?;
     let reference = MediaReference::parse(required_text(params.get("file"))?)
         .map_err(|_error| AccountActionError::BadParameters)?;
-    let file_name = params
-        .get("name")
-        .and_then(Value::as_str)
-        .filter(|value| !value.is_empty())
-        .or_else(|| reference.suggested_file_name())
-        .unwrap_or("file");
+    let file_name = file_name(params.get("name"), reference.suggested_file_name())?;
     let target_directory = params
         .get("folder")
         .and_then(Value::as_str)

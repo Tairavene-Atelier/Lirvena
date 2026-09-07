@@ -31,9 +31,10 @@ pub use long_message::{
 pub use model::{MessageClass, MessageEnvelope, MessagePayload, MessageRoute};
 pub use notice::{GroupNotice, MemberDecreaseKind, MemberIncreaseKind, decode_group_notice};
 pub use outbound::{
-    ForwardEntryInput, OutboundSegment, SendMessageInput, SendTextInput, SendTextOutcome,
-    SendTextTarget, encode_forward_entry, encode_message, encode_text_message,
-    parse_send_message_response,
+    ForwardEntryInput, OutboundSegment, PrivateFileMessageInput, SendMessageInput, SendTextInput,
+    SendTextOutcome, SendTextTarget, encode_forward_entry, encode_message,
+    encode_private_file_message, encode_text_message, parse_send_message_response,
+    validate_private_file_message_response,
 };
 pub use reaction::{GroupReaction, decode_group_reaction};
 pub use read_report::{ReadReportInput, encode_read_report, validate_read_report_response};

@@ -34,6 +34,17 @@ pub(super) fn required_text(value: Option<&Value>) -> Result<&str, AccountAction
         .ok_or(AccountActionError::BadParameters)
 }
 
+pub(super) fn file_name<'a>(
+    value: Option<&'a Value>,
+    suggested: Option<&'a str>,
+) -> Result<&'a str, AccountActionError> {
+    match value {
+        Some(Value::String(value)) if !value.is_empty() => Ok(value),
+        Some(Value::String(_)) | None => Ok(suggested.unwrap_or("file")),
+        Some(_) => Err(AccountActionError::BadParameters),
+    }
+}
+
 fn parse_u32(value: Option<&Value>) -> Option<u64> {
     value.and_then(|value| match value {
         Value::Number(number) => number.as_u64(),
