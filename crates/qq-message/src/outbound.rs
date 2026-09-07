@@ -3,7 +3,7 @@ use prost::Message;
 use crate::MessageDecodeError;
 
 mod private_file;
-mod structured;
+pub(crate) mod structured;
 
 pub use private_file::{
     PrivateFileMessageInput, encode_private_file_message, validate_private_file_message_response,

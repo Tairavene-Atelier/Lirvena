@@ -1,4 +1,5 @@
 mod decode;
+mod group_file;
 pub(crate) mod location;
 mod media;
 mod media_decode;
@@ -10,6 +11,7 @@ pub use decode::decode_rich_text;
 pub use location::LocationSegment;
 pub use media::{ImageSegment, MediaFile, MediaScope, VideoSegment, VoiceSegment};
 pub use model::{
-    FaceKind, FaceSegment, ForwardSegment, MentionSegment, MentionTarget, OpaqueAttachment,
-    PokeSegment, ReplySegment, RichTextElement, RichTextMessage, Segment, XmlSegment,
+    FaceKind, FaceSegment, ForwardSegment, GroupFileSegment, MentionSegment, MentionTarget,
+    OpaqueAttachment, PokeSegment, ReplySegment, RichTextElement, RichTextMessage, Segment,
+    XmlSegment,
 };

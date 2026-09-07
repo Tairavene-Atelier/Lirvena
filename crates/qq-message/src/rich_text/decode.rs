@@ -70,6 +70,12 @@ fn decode_element(encoded: Vec<u8>) -> Result<RichTextElement, MessageDecodeErro
             .as_deref()
             .map(super::media_legacy::decode_direct_image)
             .transpose()?,
+        wire.transfer
+            .as_deref()
+            .map(super::group_file::decode)
+            .transpose()?
+            .flatten()
+            .map(Segment::File),
         wire.group_image
             .as_deref()
             .map(super::media_legacy::decode_group_image)
@@ -201,6 +207,11 @@ fn decode_common(input: &[u8]) -> Result<Option<Segment>, MessageDecodeError> {
     }
     if wire.service_type == 48 {
         return super::media_decode::decode(wire.business_type, &body);
+    }
+    if wire.service_type == 45 && wire.business_type == 1 {
+        return crate::outbound::structured::decode_markdown(&body)
+            .map(Segment::Markdown)
+            .map(Some);
     }
     if wire.service_type == 2 {
         let (kind, strength) = crate::rich_content::decode_poke(&body)?;

@@ -157,6 +157,10 @@ pub enum AccountEvent {
     Poke(Box<crate::ResolvedPoke>),
     /// One authenticated group essence-message change.
     GroupEssence(Box<crate::ResolvedGroupEssence>),
+    /// One authenticated private-file arrival with a resolved URL.
+    PrivateFile(Box<crate::ResolvedPrivateFile>),
+    /// One authenticated group-file arrival with a resolved URL.
+    GroupFile(Box<crate::ResolvedGroupFile>),
     /// One authenticated group-message recall with retained correlation.
     GroupRecall(Box<crate::ResolvedGroupRecall>),
     /// One authenticated direct-message recall with retained correlation.

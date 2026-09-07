@@ -20,6 +20,45 @@ use crate::support::random_nonzero_u32;
 const MAX_LIST_PAGES: u32 = 256;
 const GROUP_FILE_HIGHWAY_COMMAND: u32 = 71;
 
+pub(super) struct GroupFileResolution<'a, 'context> {
+    pub(super) identity: &'a account_api::AccountIdentity,
+    pub(super) group_id: u32,
+    pub(super) sender_id: u32,
+    pub(super) occurred_at: u64,
+    pub(super) packets: &'a PacketRuntime,
+    pub(super) pushes: &'a PushRuntime,
+    pub(super) context: &'a mut OnlineContext<'context>,
+}
+
+pub(super) async fn resolve_notice(
+    resolution: GroupFileResolution<'_, '_>,
+    file: &qq_message::GroupFileSegment,
+) -> Result<account_api::ResolvedGroupFile, AccountActionError> {
+    let control = group_file_download_request(resolution.group_id, file.file_id())
+        .map_err(|_error| AccountActionError::QqFailure)?;
+    let response = send_control_response(
+        &control,
+        resolution.packets,
+        resolution.pushes,
+        resolution.context,
+    )
+    .await?;
+    let url = parse_group_file_download_response(&response, file.file_id())
+        .map_err(|_error| AccountActionError::QqFailure)?;
+    account_api::ResolvedGroupFile::new(
+        resolution.identity.clone(),
+        u64::from(resolution.group_id),
+        u64::from(resolution.sender_id),
+        file.bus_id(),
+        file.file_id().to_owned(),
+        file.name().to_owned(),
+        file.size(),
+        url,
+        resolution.occurred_at,
+    )
+    .map_err(|_error| AccountActionError::QqFailure)
+}
+
 pub(super) async fn upload(
     request: &AccountActionRequest,
     media: &mut MediaRuntime,

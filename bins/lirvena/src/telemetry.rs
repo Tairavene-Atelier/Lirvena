@@ -171,6 +171,8 @@ fn record_event(
         | AccountEvent::GroupNameChange(_)
         | AccountEvent::Poke(_)
         | AccountEvent::GroupEssence(_)
+        | AccountEvent::PrivateFile(_)
+        | AccountEvent::GroupFile(_)
         | AccountEvent::GroupRecall(_)
         | AccountEvent::FriendRecall(_)
         | AccountEvent::GroupRequest(_)

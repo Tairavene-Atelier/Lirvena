@@ -26,6 +26,32 @@ const PRIVATE_FILE_HIGHWAY_COMMAND: u32 = 95;
 const FILE_LIFETIME_SECONDS: u32 = 7 * 24 * 60 * 60;
 const PREFIX_DIGEST_BYTES: usize = 10 * 1024 * 1024;
 
+pub(super) async fn resolve_notice(
+    identity: &account_api::AccountIdentity,
+    notice: &qq_message::PrivateFileNotice,
+    occurred_at: u64,
+    packets: &PacketRuntime,
+    pushes: &PushRuntime,
+    context: &mut OnlineContext<'_>,
+) -> Result<account_api::ResolvedPrivateFile, AccountActionError> {
+    let control = private_file_url(notice.sender_uid(), notice.file_id(), notice.hash())
+        .map_err(|_error| AccountActionError::QqFailure)?;
+    let response = send_control_response(&control, packets, pushes, context).await?;
+    let url = parse_private_file_url_response(&response)
+        .map_err(|_error| AccountActionError::QqFailure)?;
+    account_api::ResolvedPrivateFile::new(
+        identity.clone(),
+        u64::from(notice.sender_id()),
+        notice.file_id().to_owned(),
+        notice.name().to_owned(),
+        notice.size(),
+        url,
+        notice.hash().to_owned(),
+        occurred_at,
+    )
+    .map_err(|_error| AccountActionError::QqFailure)
+}
+
 pub(super) async fn download_url(
     request: &AccountActionRequest,
     packets: &PacketRuntime,

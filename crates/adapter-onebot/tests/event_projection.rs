@@ -604,6 +604,60 @@ fn group_essence_uses_the_retained_message_id() -> TestResult {
     Ok(())
 }
 
+#[test]
+fn private_file_notice_keeps_the_qq_download_material() -> TestResult {
+    let event = AccountEvent::PrivateFile(Box::new(account_api::ResolvedPrivateFile::new(
+        identity()?,
+        42,
+        "file-id".to_owned(),
+        "report.txt".to_owned(),
+        12,
+        "http://127.0.0.1/file?id=1".to_owned(),
+        "file-hash".to_owned(),
+        1_800_000_000,
+    )?));
+    assert_eq!(
+        project_account_event(&event, IdFormat::String)?.ok_or("missing private file")?,
+        json!({
+            "time": 1_800_000_000,
+            "self_id": "10001",
+            "post_type": "notice",
+            "notice_type": "offline_file",
+            "user_id": "42",
+            "file": {
+                "id": "file-id",
+                "name": "report.txt",
+                "size": 12,
+                "url": "http://127.0.0.1/file?id=1",
+                "hash": "file-hash"
+            }
+        })
+    );
+    Ok(())
+}
+
+#[test]
+fn group_file_notice_keeps_the_qq_download_material() -> TestResult {
+    let event = AccountEvent::GroupFile(Box::new(account_api::ResolvedGroupFile::new(
+        identity()?,
+        88,
+        42,
+        102,
+        "file-id".to_owned(),
+        "report.txt".to_owned(),
+        12,
+        "http://127.0.0.1/file?id=1".to_owned(),
+        1_800_000_000,
+    )?));
+    let value = project_account_event(&event, IdFormat::String)?.ok_or("missing group file")?;
+    assert_eq!(value["notice_type"], "group_upload");
+    assert_eq!(value["group_id"], "88");
+    assert_eq!(value["user_id"], "42");
+    assert_eq!(value["file"]["busid"], 102);
+    assert_eq!(value["file"]["id"], "file-id");
+    Ok(())
+}
+
 fn event(
     message_type: u32,
     group: Option<(u32, &str)>,
