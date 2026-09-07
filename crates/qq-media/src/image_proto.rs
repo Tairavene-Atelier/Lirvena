@@ -212,10 +212,15 @@ pub(super) struct DownloadRequest {
 pub(super) struct DownloadExtension {
     #[prost(message, optional, tag = "1")]
     pub picture: Option<PictureDownloadExtension>,
+    #[prost(message, optional, tag = "3")]
+    pub voice: Option<VoiceDownloadExtension>,
 }
 
 #[derive(Clone, Copy, PartialEq, Message)]
 pub(super) struct PictureDownloadExtension {}
+
+#[derive(Clone, Copy, PartialEq, Message)]
+pub(super) struct VoiceDownloadExtension {}
 
 #[derive(Clone, PartialEq, Message)]
 pub(super) struct DownloadResponse {

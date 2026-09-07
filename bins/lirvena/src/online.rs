@@ -1,4 +1,5 @@
 mod actions;
+mod ai_voice;
 mod avatar;
 mod controls;
 mod directory;

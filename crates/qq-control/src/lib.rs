@@ -4,6 +4,7 @@
 use prost::Message;
 use qq_wire::{decode_oidb_response, encode_oidb_request};
 
+mod ai_voice;
 mod delete_friend;
 mod essence;
 mod face_asset;
@@ -19,6 +20,10 @@ mod private_file_upload;
 mod reaction;
 mod ticket;
 
+pub use ai_voice::{
+    AiVoiceCategory, AiVoiceCharacter, AiVoiceGeneration, ai_voice_characters, generate_ai_voice,
+    parse_ai_voice_characters_response, parse_ai_voice_generation_response,
+};
 pub use delete_friend::delete_friend;
 pub use essence::{delete_group_essence, set_group_essence};
 pub use face_asset::{
