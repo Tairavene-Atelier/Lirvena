@@ -54,6 +54,8 @@ Lagrange 兼容的 `send_poke`、`group_poke` 与 `friend_poke` 使用独立 QQ 
 并通过冻结 52194 Highway 命令上传；无效图像或 QQ 未完整确认上传时不会返回伪成功。
 `upload_image` 复用同一图片上传链，并在上传完成后使用 QQ 返回的完整媒体索引换取带
 rkey 的 HTTPS 下载地址；地址材料缺失、响应被拒绝或不安全时不会猜测 URL。
+`ocr_image` 与兼容别名 `.ocr_image` 会先复用上述真实上传链，再把 QQ 返回的图片地址交给
+QQ OCR；文本、置信度、多边形坐标和语言均来自有界响应，任一层拒绝或结构缺失都明确失败。
 `fetch_custom_face` 与 `fetch_mface_key` 已接入有界 QQ 查询；前者的客户端版本只取自
 Ceylith 签名 Profile，返回路径和表情 key 不完整或超限时均明确失败。
 群文件删除、移动和文件夹创建、删除、重命名使用冻结 QQ 请求，并同时校验 OIDB 外层结果与
