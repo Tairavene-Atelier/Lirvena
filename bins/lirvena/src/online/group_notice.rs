@@ -218,10 +218,10 @@ fn endpoint(value: &str) -> Result<Url, AccountActionError> {
 }
 
 fn validate_text(value: &str, maximum: usize) -> Result<(), AccountActionError> {
-    if !is_bounded_text(value, maximum) {
-        Err(AccountActionError::QqFailure)
-    } else {
+    if is_bounded_text(value, maximum) {
         Ok(())
+    } else {
+        Err(AccountActionError::QqFailure)
     }
 }
 
