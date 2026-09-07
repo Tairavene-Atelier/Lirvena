@@ -818,7 +818,7 @@ async fn compile_segment(
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_owned();
-            let content = segment
+            let location_content = segment
                 .data()
                 .get("content")
                 .and_then(Value::as_str)
@@ -828,7 +828,7 @@ async fn compile_segment(
                 latitude,
                 longitude,
                 title,
-                content,
+                content: location_content,
             })
         }
         "mface" => compile_market_face(segment),
