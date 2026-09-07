@@ -1169,6 +1169,7 @@ dependencies = [
  "ceylith-crypto",
  "ceylith-protocol",
  "community-telemetry",
+ "futures-util",
  "getrandom 0.4.3",
  "local-state",
  "notify-runtime",

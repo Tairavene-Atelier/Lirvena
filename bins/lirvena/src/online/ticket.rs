@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use account_api::{AccountActionError, AccountActionRequest};
+use futures_util::StreamExt;
 use qq_control::{
     client_key_request, domain_ticket_request, parse_client_key_response,
     parse_domain_ticket_response,
@@ -10,6 +11,7 @@ use qq_control::{
 use reqwest::cookie::{CookieStore, Jar};
 use reqwest::redirect::Policy;
 use reqwest::{Client, Url};
+use reqwest::{Method, RequestBuilder, Response};
 use serde_json::{Value, json};
 use zeroize::Zeroize;
 
@@ -29,6 +31,29 @@ pub(super) struct TicketRuntime {
     client_key: Option<CachedSecret>,
     skey: Option<CachedSecret>,
     domain_tickets: BTreeMap<String, CachedSecret>,
+}
+
+pub(super) struct TicketAccess<'a, 'context> {
+    uin: u64,
+    packets: &'a PacketRuntime,
+    pushes: &'a PushRuntime,
+    online: &'a mut OnlineContext<'context>,
+}
+
+impl<'a, 'context> TicketAccess<'a, 'context> {
+    pub(super) const fn new(
+        uin: u64,
+        packets: &'a PacketRuntime,
+        pushes: &'a PushRuntime,
+        online: &'a mut OnlineContext<'context>,
+    ) -> Self {
+        Self {
+            uin,
+            packets,
+            pushes,
+            online,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -102,6 +127,61 @@ impl TicketRuntime {
         Ok(format!(
             "p_uin=o{uin}; p_skey={ticket}; skey={skey}; uin=o{uin}"
         ))
+    }
+
+    pub(super) async fn csrf(
+        &mut self,
+        uin: u64,
+        packets: &PacketRuntime,
+        pushes: &PushRuntime,
+        context: &mut OnlineContext<'_>,
+    ) -> Result<i32, AccountActionError> {
+        let skey = self.skey(uin, packets, pushes, context).await?;
+        Ok(csrf_token(&skey))
+    }
+
+    pub(super) async fn authenticated_request(
+        &mut self,
+        method: Method,
+        url: Url,
+        domain: &str,
+        access: TicketAccess<'_, '_>,
+    ) -> Result<RequestBuilder, AccountActionError> {
+        let cookies = self
+            .cookies(
+                domain,
+                access.uin,
+                access.packets,
+                access.pushes,
+                access.online,
+            )
+            .await?;
+        Ok(self.client.request(method, url).header("cookie", cookies))
+    }
+
+    pub(super) async fn bounded_body(
+        response: Response,
+        maximum: usize,
+    ) -> Result<Vec<u8>, AccountActionError> {
+        let response = response
+            .error_for_status()
+            .map_err(|_error| AccountActionError::QqFailure)?;
+        if response
+            .content_length()
+            .is_some_and(|length| length > maximum as u64)
+        {
+            return Err(AccountActionError::QqFailure);
+        }
+        let mut stream = response.bytes_stream();
+        let mut body = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|_error| AccountActionError::QqFailure)?;
+            if body.len().saturating_add(chunk.len()) > maximum {
+                return Err(AccountActionError::QqFailure);
+            }
+            body.extend_from_slice(&chunk);
+        }
+        Ok(body)
     }
 
     async fn domain_ticket(
