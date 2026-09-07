@@ -17,7 +17,7 @@ prost = "=0.14.4"
 qq-wire = { version = "=0.0.0", path = "../qq-wire" }
 reqwest = { version = "=0.13.4", default-features = false, features = ["rustls-no-provider", "stream"] }
 sha1 = "=0.10.7"
-sha2 = "=0.10.9"
+sha2 = "=0.11.0"
 tempfile = "=3.27.0"
 tokio = { version = "=1.53.1", features = ["fs", "io-util", "net", "process", "time"] }
 url = "=2.5.8"
