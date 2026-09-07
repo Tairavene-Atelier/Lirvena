@@ -325,6 +325,74 @@ impl OnlineRuntime {
                         ),
                     }
                 }
+                DecodedPush::GroupNameChange {
+                    change,
+                    occurred_at,
+                    ..
+                } => {
+                    if let Ok(change) = account_api::ResolvedGroupNameChange::new(
+                        self.identity.clone(),
+                        u64::from(change.group_id()),
+                        change.name().to_owned(),
+                        occurred_at,
+                    ) {
+                        let _delivered = self
+                            .events
+                            .publish(AccountEvent::GroupNameChange(Box::new(change)));
+                    }
+                }
+                DecodedPush::Poke {
+                    poke, occurred_at, ..
+                } => {
+                    let scope = match poke.scope() {
+                        qq_message::PokeScope::Friend => account_api::ResolvedPokeScope::Friend,
+                        qq_message::PokeScope::Group(group_id) => {
+                            account_api::ResolvedPokeScope::Group(u64::from(group_id))
+                        }
+                    };
+                    if let Ok(poke) = account_api::ResolvedPoke::new(
+                        self.identity.clone(),
+                        scope,
+                        u64::from(poke.operator_id()),
+                        u64::from(poke.target_id()),
+                        poke.action().to_owned(),
+                        poke.suffix().to_owned(),
+                        poke.image_url().to_owned(),
+                        occurred_at,
+                    ) {
+                        let _delivered = self.events.publish(AccountEvent::Poke(Box::new(poke)));
+                    }
+                }
+                DecodedPush::GroupEssence {
+                    essence,
+                    occurred_at,
+                    ..
+                } => {
+                    let message_id = self
+                        .messages
+                        .find_group_message_id(essence.group_id(), u64::from(essence.sequence()))
+                        .ok()
+                        .flatten()
+                        .unwrap_or_default();
+                    match account_api::ResolvedGroupEssence::new(
+                        self.identity.clone(),
+                        u64::from(essence.group_id()),
+                        message_id,
+                        u64::from(essence.sender_id()),
+                        u64::from(essence.operator_id()),
+                        essence.is_added(),
+                        occurred_at,
+                    ) {
+                        Ok(essence) => {
+                            let _delivered = self
+                                .events
+                                .publish(AccountEvent::GroupEssence(Box::new(essence)));
+                        }
+                        Err(_error) => eprintln!(
+                            "Lirvena retained no OneBot essence change because its authenticated message correlation was unavailable"
+                        ),
+                    }
+                }
                 DecodedPush::GroupRecall {
                     recall,
                     occurred_at,

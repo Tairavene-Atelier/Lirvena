@@ -1,6 +1,6 @@
 use prost::Message;
 
-use crate::{MessageClass, MessageDecodeError, MessageEnvelope};
+use crate::{MessageClass, MessageDecodeError, MessageEnvelope, event_payload};
 
 const GROUP_RECALL_SUBTYPE: u32 = 17;
 const MAX_RECALLS: usize = 32;
@@ -63,7 +63,7 @@ pub fn decode_group_recalls(
         return Ok(None);
     }
     let content = envelope.payload().content().ok_or(MessageDecodeError)?;
-    let (prefixed_group, proto) = split_event_payload(content).ok_or(MessageDecodeError)?;
+    let (prefixed_group, proto) = event_payload::split(content).ok_or(MessageDecodeError)?;
     let body = NoticeWire::decode(proto).map_err(|_error| MessageDecodeError)?;
     if prefixed_group == 0 || body.group_id != prefixed_group {
         return Err(MessageDecodeError);
@@ -94,13 +94,6 @@ pub fn decode_group_recalls(
         })
         .collect::<Result<Vec<_>, _>>()
         .map(Some)
-}
-
-fn split_event_payload(input: &[u8]) -> Option<(u32, &[u8])> {
-    let group = u32::from_be_bytes(input.get(..4)?.try_into().ok()?);
-    let length = usize::from(u16::from_be_bytes(input.get(5..7)?.try_into().ok()?));
-    let end = 7_usize.checked_add(length)?;
-    (end == input.len()).then(|| (group, &input[7..end]))
 }
 
 fn validate_optional_uid(value: Option<String>) -> Result<Option<String>, MessageDecodeError> {

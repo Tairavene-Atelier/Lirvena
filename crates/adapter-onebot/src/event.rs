@@ -55,6 +55,11 @@ pub fn project_account_event(
             Ok(Some(project_group_reaction(reaction, id_format)))
         }
         AccountEvent::GroupMute(mute) => Ok(Some(project_group_mute(mute, id_format))),
+        AccountEvent::GroupNameChange(change) => {
+            Ok(Some(project_group_name_change(change, id_format)))
+        }
+        AccountEvent::Poke(poke) => Ok(Some(project_poke(poke, id_format))),
+        AccountEvent::GroupEssence(essence) => Ok(Some(project_group_essence(essence, id_format))),
         AccountEvent::GroupRecall(recall) => Ok(Some(project_group_recall(recall, id_format))),
         AccountEvent::FriendRecall(recall) => Ok(Some(project_friend_recall(recall, id_format))),
         AccountEvent::GroupRequest(request) => Ok(Some(project_group_request(request, id_format))),
@@ -65,6 +70,64 @@ pub fn project_account_event(
             Ok(None)
         }
     }
+}
+
+fn project_group_essence(
+    essence: &account_api::ResolvedGroupEssence,
+    id_format: IdFormat,
+) -> Value {
+    json!({
+        "time": essence.occurred_at(),
+        "self_id": id_format.value(essence.account().qq_id()),
+        "post_type": "notice",
+        "notice_type": "essence",
+        "sub_type": if essence.is_added() { "add" } else { "delete" },
+        "group_id": id_format.value(essence.group_id()),
+        "sender_id": id_format.value(essence.sender_id()),
+        "operator_id": id_format.value(essence.operator_id()),
+        "message_id": id_format.value(u64::from(essence.message_id()))
+    })
+}
+
+fn project_poke(poke: &account_api::ResolvedPoke, id_format: IdFormat) -> Value {
+    let mut object = Map::from_iter([
+        ("time".to_owned(), json!(poke.occurred_at())),
+        (
+            "self_id".to_owned(),
+            id_format.value(poke.account().qq_id()),
+        ),
+        ("post_type".to_owned(), json!("notice")),
+        ("notice_type".to_owned(), json!("notify")),
+        ("sub_type".to_owned(), json!("poke")),
+        ("user_id".to_owned(), id_format.value(poke.operator_id())),
+        ("target_id".to_owned(), id_format.value(poke.target_id())),
+        ("action".to_owned(), json!(poke.action())),
+        ("suffix".to_owned(), json!(poke.suffix())),
+        ("action_img_url".to_owned(), json!(poke.image_url())),
+    ]);
+    match poke.scope() {
+        account_api::ResolvedPokeScope::Friend => {
+            object.insert("sender_id".to_owned(), id_format.value(poke.operator_id()));
+        }
+        account_api::ResolvedPokeScope::Group(group_id) => {
+            object.insert("group_id".to_owned(), id_format.value(group_id));
+        }
+    }
+    Value::Object(object)
+}
+
+fn project_group_name_change(
+    change: &account_api::ResolvedGroupNameChange,
+    id_format: IdFormat,
+) -> Value {
+    json!({
+        "time": change.occurred_at(),
+        "self_id": id_format.value(change.account().qq_id()),
+        "post_type": "notice",
+        "notice_type": "group_name_change",
+        "group_id": id_format.value(change.group_id()),
+        "name": change.name()
+    })
 }
 
 fn project_friend_recall(recall: &account_api::ResolvedFriendRecall, id_format: IdFormat) -> Value {

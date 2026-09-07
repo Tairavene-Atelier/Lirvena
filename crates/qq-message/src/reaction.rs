@@ -1,6 +1,6 @@
 use prost::Message;
 
-use crate::{MessageClass, MessageDecodeError, MessageEnvelope};
+use crate::{MessageClass, MessageDecodeError, MessageEnvelope, event_payload};
 
 const GROUP_EVENT_SUBTYPE: u32 = 16;
 const REACTION_FIELD_KIND: u32 = 35;
@@ -71,7 +71,7 @@ pub fn decode_group_reaction(
     let Some(content) = envelope.payload().content() else {
         return Ok(None);
     };
-    let Some((prefixed_group, proto)) = split_event_payload(content) else {
+    let Some((prefixed_group, proto)) = event_payload::split(content) else {
         return Ok(None);
     };
     let Ok(body) = ReactionNoticeWire::decode(proto) else {
@@ -113,13 +113,6 @@ pub fn decode_group_reaction(
         code: data.code,
         count: data.count,
     }))
-}
-
-fn split_event_payload(input: &[u8]) -> Option<(u32, &[u8])> {
-    let group = u32::from_be_bytes(input.get(..4)?.try_into().ok()?);
-    let length = usize::from(u16::from_be_bytes(input.get(5..7)?.try_into().ok()?));
-    let end = 7_usize.checked_add(length)?;
-    (end == input.len()).then(|| (group, &input[7..end]))
 }
 
 #[derive(Clone, PartialEq, Message)]
