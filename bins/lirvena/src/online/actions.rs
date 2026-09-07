@@ -164,6 +164,9 @@ pub(super) async fn execute_account_action(
         "upload_image" => {
             super::image::upload(request, resources.media, packets, pushes, context).await
         }
+        ".ocr_image" | "ocr_image" => {
+            super::image::ocr(request, resources.media, packets, pushes, context).await
+        }
         "delete_group_file"
         | "move_group_file"
         | "create_group_file_folder"

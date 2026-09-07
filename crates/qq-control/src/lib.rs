@@ -10,6 +10,7 @@ mod face_asset;
 mod friend_request;
 mod group_file;
 mod group_request;
+mod image_ocr;
 mod poke;
 mod private_file;
 mod reaction;
@@ -30,6 +31,9 @@ pub use group_file::{
     parse_group_file_upload_response, rename_group_file_folder,
 };
 pub use group_request::group_request;
+pub use image_ocr::{
+    ImageOcrCoordinate, ImageOcrDetection, ImageOcrResult, image_ocr, parse_image_ocr_response,
+};
 pub use poke::poke;
 pub use private_file::{parse_private_file_url_response, private_file_url};
 pub use reaction::{EmojiChainTarget, group_reaction, join_emoji_chain};
