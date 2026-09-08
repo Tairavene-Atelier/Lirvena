@@ -122,6 +122,8 @@ pub(super) async fn run(
         &device,
         account_slot_id,
         &secrets,
+        &random_key,
+        &key_agreement,
         &mut wtlogin_sequence,
     )
     .await?;
