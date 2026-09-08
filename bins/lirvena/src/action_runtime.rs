@@ -57,7 +57,7 @@ pub(super) async fn run(context: BootstrapContext<'_>) -> Result<(), Box<dyn std
         .checked_add(FLOW_LIFETIME_MS)
         .ok_or_else(|| io::Error::other("action-flow deadline overflow"))?;
     let inputs = action_flow_inputs(
-        random_array::<8>()?.to_vec(),
+        device.profile().encode_snapshot(),
         random_array::<16>()?.to_vec(),
     )?;
     let flow = ActionFlowContext {

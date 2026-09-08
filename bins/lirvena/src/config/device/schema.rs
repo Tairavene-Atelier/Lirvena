@@ -1,11 +1,11 @@
 use std::io;
 
-use qq_domain::{DevicePower, DeviceProfile};
+use qq_domain::{DevicePortrait, DevicePower, DeviceProfile};
 use serde::{Deserialize, Serialize};
 
 use super::invalid;
 
-const DEVICE_SCHEMA_VERSION: u16 = 3;
+const DEVICE_SCHEMA_VERSION: u16 = 4;
 
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -13,10 +13,20 @@ struct DeviceFile {
     schema_version: u16,
     guid: String,
     mac_address: String,
+    archetype: String,
+    profile_category: String,
+    hostname: String,
     device_name: String,
-    model: String,
-    system_kernel: String,
-    kernel_version: String,
+    hardware_model: String,
+    os_release: String,
+    distro: String,
+    desktop_environment: String,
+    session_type: String,
+    login_name: String,
+    network_interface: String,
+    root_filesystem_bytes: String,
+    memory_total_kib: String,
+    timezone: String,
     power: PowerFile,
 }
 
@@ -44,27 +54,52 @@ impl DeviceFile {
         if self.schema_version != DEVICE_SCHEMA_VERSION {
             return Err(invalid());
         }
-        DeviceProfile::new(
+        let portrait = DevicePortrait::new(
+            self.archetype,
+            self.profile_category,
+            self.hostname,
+            self.device_name,
+            self.hardware_model,
+            self.os_release,
+            self.distro,
+            self.desktop_environment,
+            self.session_type,
+            self.login_name,
+            self.network_interface,
+            self.root_filesystem_bytes,
+            self.memory_total_kib,
+            self.timezone,
+        )
+        .map_err(|_error| invalid())?;
+        DeviceProfile::from_portrait(
             parse_guid(&self.guid)?,
             parse_mac(&self.mac_address)?,
-            self.device_name,
-            self.model,
-            self.system_kernel,
-            self.kernel_version,
+            portrait,
             self.power.into(),
         )
         .map_err(|_error| invalid())
     }
 
     fn from_profile(profile: &DeviceProfile) -> Self {
+        let portrait = profile.portrait();
         Self {
             schema_version: DEVICE_SCHEMA_VERSION,
             guid: format_guid(profile.guid()),
             mac_address: format_mac(*profile.mac_address()),
-            device_name: profile.device_name().to_owned(),
-            model: profile.model().to_owned(),
-            system_kernel: profile.system_kernel().to_owned(),
-            kernel_version: profile.kernel_version().to_owned(),
+            archetype: portrait.archetype().to_owned(),
+            profile_category: portrait.profile_category().to_owned(),
+            hostname: portrait.hostname().to_owned(),
+            device_name: portrait.device_name().to_owned(),
+            hardware_model: portrait.hardware_model().to_owned(),
+            os_release: portrait.os_release().to_owned(),
+            distro: portrait.distro().to_owned(),
+            desktop_environment: portrait.desktop_environment().to_owned(),
+            session_type: portrait.session_type().to_owned(),
+            login_name: portrait.login_name().to_owned(),
+            network_interface: portrait.network_interface().to_owned(),
+            root_filesystem_bytes: portrait.root_filesystem_bytes().to_owned(),
+            memory_total_kib: portrait.memory_total_kib().to_owned(),
+            timezone: portrait.timezone().to_owned(),
             power: profile.power().into(),
         }
     }
@@ -113,6 +148,9 @@ fn parse_mac(value: &str) -> Result<[u8; 6], io::Error> {
 
 fn parse_hex<const N: usize>(bytes: impl Iterator<Item = u8>) -> Result<[u8; N], io::Error> {
     let hexadecimal = bytes.collect::<Vec<_>>();
+    if hexadecimal.len() != N * 2 {
+        return Err(invalid());
+    }
     let mut parsed = [0_u8; N];
     for (target, pair) in parsed.iter_mut().zip(hexadecimal.chunks_exact(2)) {
         let text = core::str::from_utf8(pair).map_err(|_error| invalid())?;
