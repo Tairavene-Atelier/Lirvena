@@ -16,17 +16,30 @@ use super::ceylith::OpaqueOperation;
 use super::qq::execute_request;
 use crate::support::random_nonzero_u32;
 
+pub(super) struct CredentialFlow<'a> {
+    pub(super) ceylith: &'a InstallationClient,
+    pub(super) profile: &'a LinuxNtProfile,
+    pub(super) device: &'a QrDevice,
+    pub(super) account_slot_id: AccountSlotId,
+    pub(super) qr_secrets: &'a QrLoginSecrets,
+    pub(super) random_key: &'a QqTeaKey,
+    pub(super) key_agreement: &'a LinuxKeyAgreement,
+}
+
 pub(super) async fn exchange(
-    ceylith: &InstallationClient,
+    flow: CredentialFlow<'_>,
     qq: &mut QqTransport<TcpStream>,
-    profile: &LinuxNtProfile,
-    device: &QrDevice,
-    account_slot_id: AccountSlotId,
-    qr_secrets: &QrLoginSecrets,
-    random_key: &QqTeaKey,
-    key_agreement: &LinuxKeyAgreement,
     wtlogin_sequence: &mut WtLoginSequence,
 ) -> Result<CredentialLogin, Box<dyn std::error::Error>> {
+    let CredentialFlow {
+        ceylith,
+        profile,
+        device,
+        account_slot_id,
+        qr_secrets,
+        random_key,
+        key_agreement,
+    } = flow;
     let request = build_credential_exchange(CredentialExchangeContext {
         profile,
         device,
