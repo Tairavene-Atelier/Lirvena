@@ -25,7 +25,7 @@ fn request_matches_52194_login_envelope_and_tlv_order() -> Result<(), Box<dyn st
     let device = QrDevice::new(DeviceProfile::new(
         [4; 16],
         [2, 0, 0, 0, 0, 4],
-        "Lirvena test".to_owned(),
+        "lirvena-test".to_owned(),
         "Synthetic desktop".to_owned(),
         "Linux".to_owned(),
         "6.8.0-generic".to_owned(),

@@ -7,6 +7,7 @@ mod key_agreement;
 mod polling;
 mod qr_packet;
 mod sequence;
+mod wtlogin;
 
 pub use artifact::QrArtifact;
 pub use credential::{

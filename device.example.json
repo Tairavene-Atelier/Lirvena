@@ -1,11 +1,21 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "guid": "1a6e4d86-d973-4d98-b395-13fcf7438f70",
   "mac_address": "02:00:00:00:00:01",
+  "archetype": "uos-m720q",
+  "profile_category": "domestic-enterprise",
+  "hostname": "uos-office-42",
   "device_name": "ThinkCentre M720q",
-  "model": "ThinkCentre M720q",
-  "system_kernel": "Linux 5.10.0-amd64-desktop",
-  "kernel_version": "5.10.0-amd64-desktop",
+  "hardware_model": "Lenovo ThinkCentre M720q",
+  "os_release": "Linux 5.10.0-amd64-desktop x86_64",
+  "distro": "UOS Desktop 20",
+  "desktop_environment": "DDE",
+  "session_type": "x11",
+  "login_name": "user",
+  "network_interface": "enp0s31f6",
+  "root_filesystem_bytes": "499963174912",
+  "memory_total_kib": "16325684",
+  "timezone": "Asia/Shanghai",
   "power": {
     "kind": "desktop"
   }

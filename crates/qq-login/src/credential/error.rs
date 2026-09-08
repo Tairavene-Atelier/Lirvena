@@ -8,6 +8,20 @@ use qq_wire::WireError;
 pub enum CredentialExchangeError {
     /// An ordinary profile, credential or packet field was invalid.
     InvalidField,
+    /// The outer `WtLogin` response envelope did not match the 52194 shape.
+    InvalidResponseEnvelope,
+    /// The response account binding did not match the confirmed QR account.
+    InvalidResponseAccount,
+    /// The decrypted response did not contain the expected login command.
+    InvalidResponseCommand,
+    /// The response TLV collection was malformed or incomplete.
+    InvalidResponseTlvs,
+    /// The returned public account profile was malformed.
+    InvalidResponseProfile,
+    /// The returned UID envelope was malformed or empty.
+    InvalidResponseUid,
+    /// The returned session key had an invalid width.
+    InvalidResponseSessionKey,
     /// A bounded binary field failed validation.
     Wire,
     /// QQ login encryption failed.

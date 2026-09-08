@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::io;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use ceylith_client::{
@@ -26,6 +27,7 @@ const ONLINE_EPOCH: u64 = 1;
 const TRANSPORT_EPOCH: u64 = 1;
 const REQUIRED_RESPONSE_POLICY: u32 = 2;
 const MAX_FLOW_ACTIONS: usize = 8;
+static PROCESS_INSTANCE: OnceLock<[u8; 16]> = OnceLock::new();
 
 pub(super) struct BootstrapContext<'a> {
     pub ceylith: &'a InstallationClient,
@@ -57,8 +59,8 @@ pub(super) async fn run(context: BootstrapContext<'_>) -> Result<(), Box<dyn std
         .checked_add(FLOW_LIFETIME_MS)
         .ok_or_else(|| io::Error::other("action-flow deadline overflow"))?;
     let inputs = action_flow_inputs(
-        random_array::<8>()?.to_vec(),
-        random_array::<16>()?.to_vec(),
+        device.profile().encode_snapshot(),
+        process_instance()?.to_vec(),
     )?;
     let flow = ActionFlowContext {
         flow_id,
@@ -107,6 +109,17 @@ pub(super) async fn run(context: BootstrapContext<'_>) -> Result<(), Box<dyn std
         update = next;
     }
     Err(io::Error::other("Ceylith action flow exceeded the compiled action bound").into())
+}
+
+fn process_instance() -> Result<&'static [u8; 16], io::Error> {
+    if let Some(value) = PROCESS_INSTANCE.get() {
+        return Ok(value);
+    }
+    let value = random_array()?;
+    let _ = PROCESS_INSTANCE.set(value);
+    PROCESS_INSTANCE
+        .get()
+        .ok_or_else(|| io::Error::other("process instance initialization failed"))
 }
 
 struct ObservedAction {

@@ -12,28 +12,41 @@ use qq_profile::LinuxNtProfile;
 use qq_transport::QqTransport;
 use tokio::net::TcpStream;
 
-use super::ceylith::{OpaqueOperation, profile_peer};
+use super::ceylith::OpaqueOperation;
 use super::qq::execute_request;
-use crate::support::{random_array, random_nonzero_u32};
+use crate::support::random_nonzero_u32;
+
+pub(super) struct CredentialFlow<'a> {
+    pub(super) ceylith: &'a InstallationClient,
+    pub(super) profile: &'a LinuxNtProfile,
+    pub(super) device: &'a QrDevice,
+    pub(super) account_slot_id: AccountSlotId,
+    pub(super) qr_secrets: &'a QrLoginSecrets,
+    pub(super) random_key: &'a QqTeaKey,
+    pub(super) key_agreement: &'a LinuxKeyAgreement,
+}
 
 pub(super) async fn exchange(
-    ceylith: &InstallationClient,
+    flow: CredentialFlow<'_>,
     qq: &mut QqTransport<TcpStream>,
-    profile: &LinuxNtProfile,
-    device: &QrDevice,
-    account_slot_id: AccountSlotId,
-    qr_secrets: &QrLoginSecrets,
     wtlogin_sequence: &mut WtLoginSequence,
 ) -> Result<CredentialLogin, Box<dyn std::error::Error>> {
-    let key_agreement = LinuxKeyAgreement::new(profile_peer(profile)?)?;
-    let random_key = QqTeaKey::new(random_array()?);
+    let CredentialFlow {
+        ceylith,
+        profile,
+        device,
+        account_slot_id,
+        qr_secrets,
+        random_key,
+        key_agreement,
+    } = flow;
     let request = build_credential_exchange(CredentialExchangeContext {
         profile,
         device,
         sso_sequence: random_nonzero_u32()?,
         wtlogin_sequence: wtlogin_sequence.take(),
-        random_key: &random_key,
-        key_agreement: &key_agreement,
+        random_key,
+        key_agreement,
         secrets: qr_secrets,
     })?;
     let payload = execute_request(
@@ -50,7 +63,7 @@ pub(super) async fn exchange(
         &payload,
         CredentialResponseContext {
             uin: request.uin(),
-            key_agreement: &key_agreement,
+            key_agreement,
             tgtgt_key: qr_secrets.tgtgt_key(),
         },
     )

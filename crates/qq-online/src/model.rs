@@ -118,7 +118,7 @@ impl Default for OnlineSyncState {
     fn default() -> Self {
         Self {
             first_register: true,
-            active_status: 0,
+            active_status: 2,
             group_last_message_time: 0,
             direct_last_message_time: 0,
             previous_direct_message_time: 0,
@@ -126,7 +126,7 @@ impl Default for OnlineSyncState {
             application_status: 0,
             local_silence: 0,
             silence_version: 0,
-            scene: 0,
+            scene: 8,
             background_seconds: 0,
             chat_on_focus: false,
         }

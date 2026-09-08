@@ -14,7 +14,7 @@ use qq_transport::{QqEndpoint, QqTransport, TransportConfig};
 use tokio::sync::watch;
 
 use super::ceylith::{OpaqueOperation, profile_peer};
-use super::credential::exchange;
+use super::credential::{CredentialFlow, exchange};
 use super::face::FaceResolver;
 use super::polling::{QrPolling, until_confirmed};
 use super::qq::execute_request;
@@ -116,12 +116,16 @@ pub(super) async fn run(
     .await?;
     println!("Lirvena QR confirmed for QQ account {}", secrets.uin());
     let credential = exchange(
-        ceylith,
+        CredentialFlow {
+            ceylith,
+            profile,
+            device: &device,
+            account_slot_id,
+            qr_secrets: &secrets,
+            random_key: &random_key,
+            key_agreement: &key_agreement,
+        },
         &mut qq,
-        profile,
-        &device,
-        account_slot_id,
-        &secrets,
         &mut wtlogin_sequence,
     )
     .await?;
