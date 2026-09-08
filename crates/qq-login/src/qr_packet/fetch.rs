@@ -6,6 +6,9 @@ use crate::qr_packet::packet::{build_request_data, build_transaction, build_wtlo
 use crate::qr_packet::tlv::build_fetch_tlvs;
 use crate::{QqKeyAgreement, QrDevice, QrPacketError};
 
+#[cfg(test)]
+mod tests;
+
 const COMMAND: &str = "wtlogin.trans_emp";
 const QR_FETCH_COMMAND: u16 = 0x31;
 const MAX_LOGIN_PACKET_LEN: usize = 64 * 1024;
@@ -19,6 +22,8 @@ pub struct QrFetchContext<'a> {
     pub device: &'a QrDevice,
     /// SSO request sequence.
     pub sso_sequence: u32,
+    /// Per-login inner `WtLogin` sequence.
+    pub wtlogin_sequence: u16,
     /// Current Unix timestamp in seconds.
     pub unix_seconds: u32,
     /// Per-installation random login header value.
@@ -89,6 +94,7 @@ pub fn build_qr_fetch(context: QrFetchContext<'_>) -> Result<QrUnsignedRequest, 
     let encrypted = encrypt_qq_tea(&data, context.key_agreement.tea_key())?;
     let payload = build_wtlogin_packet(
         context.profile,
+        context.wtlogin_sequence,
         context.random_key,
         context.key_agreement.public_key(),
         &encrypted,

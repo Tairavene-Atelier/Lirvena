@@ -4,7 +4,9 @@ mod marked;
 mod tea;
 mod transport;
 
-pub use marked::{EnvelopeMark, encode_marked_reserve};
+pub use marked::{
+    EnvelopeMark, attach_account_identity, encode_account_reserve, encode_marked_reserve,
+};
 pub use tea::{QqTeaError, QqTeaKey, decrypt_qq_tea, encrypt_qq_tea, encrypt_qq_tea_with_padding};
 pub use transport::{
     EnvelopeError, ExpectedSsoResponse, ServiceFrameParts, ServiceResponse, SessionAuth,

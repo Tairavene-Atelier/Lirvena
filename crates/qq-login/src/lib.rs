@@ -6,6 +6,7 @@ mod error;
 mod key_agreement;
 mod polling;
 mod qr_packet;
+mod sequence;
 
 pub use artifact::QrArtifact;
 pub use credential::{
@@ -25,3 +26,4 @@ pub use qr_packet::{
     QrPollContext, QrPollResponse, QrResponseContext, QrUnsignedRequest, build_qr_fetch,
     build_qr_poll, decode_qr_fetch_response, decode_qr_poll_response,
 };
+pub use sequence::WtLoginSequence;

@@ -4,6 +4,9 @@ use qq_wire::{LengthPrefix, WireWriter};
 
 use crate::{QrDevice, QrPacketError};
 
+#[cfg(test)]
+mod tests;
+
 const MAX_TLV_BODY_LEN: usize = 8 * 1024;
 
 #[derive(Clone, PartialEq, Message)]
@@ -78,7 +81,7 @@ fn tlv_d1(profile: &LinuxNtProfile, device: &QrDevice) -> Vec<u8> {
     QrRequestInfo {
         system: Some(NtOperatingSystem {
             operating_system: profile.operating_system().to_owned(),
-            device_name: device.name().to_owned(),
+            device_name: device.device_name().to_owned(),
         }),
         kind: vec![0x30, 0x01],
     }

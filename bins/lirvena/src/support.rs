@@ -38,3 +38,13 @@ pub(crate) fn encode_hex(bytes: &[u8]) -> String {
     }
     output
 }
+
+pub(crate) fn ensure_rustls_provider() -> Result<(), io::Error> {
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        let _installed = rustls::crypto::ring::default_provider().install_default();
+    }
+    rustls::crypto::CryptoProvider::get_default()
+        .is_some()
+        .then_some(())
+        .ok_or_else(|| io::Error::other("Rustls crypto provider is unavailable"))
+}

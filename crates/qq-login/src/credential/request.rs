@@ -20,6 +20,8 @@ pub struct CredentialExchangeContext<'a> {
     pub device: &'a QrDevice,
     /// SSO request sequence.
     pub sso_sequence: u32,
+    /// Per-login inner `WtLogin` sequence.
+    pub wtlogin_sequence: u16,
     /// Per-login random header key.
     pub random_key: &'a QqTeaKey,
     /// Fresh key agreement for the authenticated login exchange.
@@ -114,7 +116,7 @@ fn build_packet(
     let mut body = WireWriter::new(MAX_LOGIN_PACKET_LEN);
     body.put_u16(8_001)?;
     body.put_u16(WTLOGIN_COMMAND)?;
-    body.put_u16(0)?;
+    body.put_u16(context.wtlogin_sequence)?;
     body.put_u32(uin)?;
     body.put_u8(3)?;
     body.put_u8(135)?;

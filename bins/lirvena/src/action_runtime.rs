@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::io;
 use std::time::Duration;
 
@@ -70,13 +71,22 @@ pub(super) async fn run(context: BootstrapContext<'_>) -> Result<(), Box<dyn std
     let request = ceylith.action_flow_begin_request(flow, &inputs, started_at_ms)?;
     let response = ceylith.exchange(request).await?;
     let mut update = decode_action_flow_update(&response, flow_id, now_ms()?)?;
+    let mut identity_routes = BTreeSet::new();
+    let mut execution = ActionExecutionContext {
+        qq,
+        push_plan,
+        profile,
+        device,
+        credential,
+        auth: &auth,
+        identity_routes: &mut identity_routes,
+    };
     for _step in 0..MAX_FLOW_ACTIONS {
         let action = match update {
             ActionFlowUpdate::Complete => return Ok(()),
             ActionFlowUpdate::Action(action) => action,
         };
-        let observed =
-            execute_action(qq, push_plan, profile, device, credential, &auth, &action).await;
+        let observed = execute_action(&mut execution, &action).await;
         let outcome = observed.kind;
         let request = ceylith.action_observation_request(ActionObservation {
             flow_id,
@@ -104,16 +114,28 @@ struct ObservedAction {
     payload: Vec<u8>,
 }
 
+struct ActionExecutionContext<'a, 'auth> {
+    qq: &'a mut AuthenticatedSession<TcpStream>,
+    push_plan: &'a PushPlan,
+    profile: &'a LinuxNtProfile,
+    device: &'a QrDevice,
+    credential: &'a CredentialLogin,
+    auth: &'a qq_envelope::SessionAuth<'auth>,
+    identity_routes: &'a mut BTreeSet<String>,
+}
+
 async fn execute_action(
-    qq: &mut AuthenticatedSession<TcpStream>,
-    push_plan: &PushPlan,
-    profile: &LinuxNtProfile,
-    device: &QrDevice,
-    credential: &CredentialLogin,
-    auth: &qq_envelope::SessionAuth<'_>,
+    context: &mut ActionExecutionContext<'_, '_>,
     action: &ActionDirective,
 ) -> ObservedAction {
-    let prepared = match prepare_action(profile, device, credential, auth, action) {
+    let prepared = match prepare_action(
+        context.profile,
+        context.device,
+        context.credential,
+        context.auth,
+        action,
+        context.identity_routes,
+    ) {
         Ok(prepared) => prepared,
         Err(_error) => {
             return observed(ActionObservationKind::LocalEncodeFailure, Vec::new());
@@ -125,9 +147,9 @@ async fn execute_action(
     match timeout(
         Duration::from_millis(u64::from(action.timeout_ms())),
         exchange(
-            qq,
-            push_plan,
-            auth,
+            context.qq,
+            context.push_plan,
+            context.auth,
             prepared.sequence,
             &prepared.command,
             &prepared.frame,
@@ -153,6 +175,7 @@ fn prepare_action(
     credential: &CredentialLogin,
     auth: &qq_envelope::SessionAuth<'_>,
     action: &ActionDirective,
+    identity_routes: &mut BTreeSet<String>,
 ) -> Result<PreparedAction, Box<dyn std::error::Error>> {
     if action.transport_epoch() != TRANSPORT_EPOCH
         || action.response_policy() != REQUIRED_RESPONSE_POLICY
@@ -162,6 +185,7 @@ fn prepare_action(
         return Err(io::Error::other("authenticated QQ action failed local admission").into());
     }
     let command = std::str::from_utf8(action.route_shard())?.to_owned();
+    let include_identity = identity_routes.insert(command.clone());
     let marks = action
         .marks()
         .iter()
@@ -175,6 +199,7 @@ fn prepare_action(
         &marks,
         &correlation()?,
         credential.uid(),
+        include_identity,
     )?;
     let packet_plan = decode_online_packet_plan(profile)?;
     let locale_id = u32::try_from(packet_plan.tuning().spec().locale_id)
@@ -188,6 +213,8 @@ fn prepare_action(
         command: &command,
         device_guid_hex: device_guid_hex.as_bytes(),
         reserve: &reserve,
+        account_identity: None,
+        include_identity: false,
         payload: action.body_shard(),
     };
     let frame = prepare(profile, &request)?;
@@ -200,7 +227,7 @@ fn prepare_action(
 
 fn correlation() -> Result<String, io::Error> {
     Ok(format!(
-        "01-{}-{}-01",
+        "00-{}-{}-01",
         encode_hex(&random_array::<16>()?),
         encode_hex(&random_array::<8>()?)
     ))

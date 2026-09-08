@@ -1,5 +1,6 @@
 use prost::Message;
 
+use crate::model::valid_battery_state;
 use crate::proto::{HeartbeatRequest, HeartbeatResponse, HeartbeatSilence};
 use crate::register::encode;
 use crate::{HeartbeatInput, OnlinePacketError};
@@ -20,7 +21,7 @@ pub struct HeartbeatOutcome {
 /// Returns an error for invalid signed-Profile tuning, time or battery values.
 pub fn encode_heartbeat(input: HeartbeatInput) -> Result<Vec<u8>, OnlinePacketError> {
     let tuning = input.tuning.spec();
-    if input.unix_seconds == 0 || input.battery_state > 100 {
+    if input.unix_seconds == 0 || !valid_battery_state(input.battery_state) {
         return Err(OnlinePacketError);
     }
     encode(&HeartbeatRequest {

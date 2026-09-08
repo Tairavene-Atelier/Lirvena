@@ -26,6 +26,8 @@ pub struct QrPollContext<'a> {
     pub profile: &'a LinuxNtProfile,
     /// SSO request sequence.
     pub sso_sequence: u32,
+    /// Per-login inner `WtLogin` sequence.
+    pub wtlogin_sequence: u16,
     /// Current Unix timestamp in seconds.
     pub unix_seconds: u32,
     /// Per-installation random login header value.
@@ -140,6 +142,7 @@ pub fn build_qr_poll(context: QrPollContext<'_>) -> Result<QrUnsignedRequest, Qr
     let encrypted = encrypt_qq_tea(&data, context.key_agreement.tea_key())?;
     let payload = build_wtlogin_packet(
         context.profile,
+        context.wtlogin_sequence,
         context.random_key,
         context.key_agreement.public_key(),
         &encrypted,

@@ -175,7 +175,11 @@ pub(super) fn decode_wtlogin_body(
     if internal_len != payload.len() || reader.read_u16()? != WTLOGIN_VERSION {
         return Err(QrPacketError::InvalidField);
     }
-    if reader.read_u16()? != WTLOGIN_COMMAND || reader.read_u16()? != 0 || reader.read_u32()? != 0 {
+    if reader.read_u16()? != WTLOGIN_COMMAND {
+        return Err(QrPacketError::InvalidField);
+    }
+    let _sequence = reader.read_u16()?;
+    if reader.read_u32()? != 0 {
         return Err(QrPacketError::InvalidField);
     }
     let _flag = reader.read_u8()?;

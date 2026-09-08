@@ -48,7 +48,7 @@ fn encrypted_device_bundle(
         .map_err(|_| CredentialExchangeError::InvalidField)?;
     let mut bundle = WireWriter::new(MAX_LOGIN_PACKET_LEN);
     bundle.put_u16(4)?;
-    write_tlv(&mut bundle, 0x16e, device.name().as_bytes())?;
+    write_tlv(&mut bundle, 0x16e, device.device_name().as_bytes())?;
     write_tlv(&mut bundle, 0x147, &identity_body(profile)?)?;
     write_tlv(&mut bundle, 0x128, &device_body(profile, device)?)?;
     write_tlv(&mut bundle, 0x124, &[0; 12])?;

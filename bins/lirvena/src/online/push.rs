@@ -197,7 +197,7 @@ impl PushRuntime {
                 let key = crate::qq::session_key(credential)?;
                 let auth = crate::qq::authenticated(uin, credential, &key)?;
                 packets
-                    .acknowledge_push(qq, profile, &auth, &route, &body)
+                    .acknowledge_push(qq, profile, &auth, credential.uid(), &route, &body)
                     .await?;
             }
             PushOutcome::Observed => {}

@@ -5,8 +5,8 @@ use ceylith_protocol::AccountSlotId;
 use qq_domain::{LoginMachine, LoginState};
 use qq_envelope::QqTeaKey;
 use qq_login::{
-    LinuxKeyAgreement, QrDevice, QrFetchContext, QrResponseContext, accept_qr_artifact,
-    begin_qr_request, build_qr_fetch, decode_qr_fetch_response,
+    LinuxKeyAgreement, QrDevice, QrFetchContext, QrResponseContext, WtLoginSequence,
+    accept_qr_artifact, begin_qr_request, build_qr_fetch, decode_qr_fetch_response,
 };
 use qq_profile::LinuxNtProfile;
 use qq_session::AuthenticatedSession;
@@ -15,6 +15,7 @@ use tokio::sync::watch;
 
 use super::ceylith::{OpaqueOperation, profile_peer};
 use super::credential::exchange;
+use super::face::FaceResolver;
 use super::polling::{QrPolling, until_confirmed};
 use super::qq::execute_request;
 use crate::config::AccountConfig;
@@ -49,12 +50,14 @@ pub(super) async fn run(
     let mut login = LoginMachine::new();
     let _event = begin_qr_request(&mut login, now_ms()?)?;
     let key_agreement = LinuxKeyAgreement::new(profile_peer(profile)?)?;
+    let mut wtlogin_sequence = WtLoginSequence::default();
     let device = QrDevice::new(config.device.clone());
     let random_key = QqTeaKey::new(random_array()?);
     let unsigned = build_qr_fetch(QrFetchContext {
         profile,
         device: &device,
         sso_sequence: random_nonzero_u32()?,
+        wtlogin_sequence: wtlogin_sequence.take(),
         unix_seconds: now_seconds()?,
         random_key: &random_key,
         key_agreement: &key_agreement,
@@ -85,6 +88,7 @@ pub(super) async fn run(
     )?;
     eprintln!("Lirvena decoded the QQ QR response");
     let (artifact, challenge) = response.into_parts();
+    let face = FaceResolver::new()?;
     let _event = accept_qr_artifact(&mut login, &artifact, now_ms()?)?;
     tokio::fs::write(&config.qr_output_path, artifact.png()).await?;
     println!("{}", artifact.terminal_text()?);
@@ -103,7 +107,9 @@ pub(super) async fn run(
             key_agreement: &key_agreement,
             account_slot_id,
             challenge: &challenge,
+            face: &face,
             expires_at_ms: artifact.expires_at_ms(),
+            wtlogin_sequence: &mut wtlogin_sequence,
         },
         &mut login,
     )
@@ -116,6 +122,7 @@ pub(super) async fn run(
         &device,
         account_slot_id,
         &secrets,
+        &mut wtlogin_sequence,
     )
     .await?;
     let _previous = login.transition(LoginState::Registering)?;

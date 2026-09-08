@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::invalid;
 
-const DEVICE_SCHEMA_VERSION: u16 = 1;
+const DEVICE_SCHEMA_VERSION: u16 = 3;
 
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -13,7 +13,7 @@ struct DeviceFile {
     schema_version: u16,
     guid: String,
     mac_address: String,
-    name: String,
+    device_name: String,
     model: String,
     system_kernel: String,
     kernel_version: String,
@@ -47,7 +47,7 @@ impl DeviceFile {
         DeviceProfile::new(
             parse_guid(&self.guid)?,
             parse_mac(&self.mac_address)?,
-            self.name,
+            self.device_name,
             self.model,
             self.system_kernel,
             self.kernel_version,
@@ -61,7 +61,7 @@ impl DeviceFile {
             schema_version: DEVICE_SCHEMA_VERSION,
             guid: format_guid(profile.guid()),
             mac_address: format_mac(*profile.mac_address()),
-            name: profile.name().to_owned(),
+            device_name: profile.device_name().to_owned(),
             model: profile.model().to_owned(),
             system_kernel: profile.system_kernel().to_owned(),
             kernel_version: profile.kernel_version().to_owned(),
@@ -96,7 +96,8 @@ fn parse_guid(value: &str) -> Result<[u8; 16], io::Error> {
     {
         return Err(invalid());
     }
-    parse_hex::<16>(value.bytes().filter(|byte| *byte != b'-'))
+    let canonical = parse_hex::<16>(value.bytes().filter(|byte| *byte != b'-'))?;
+    Ok(canonical_to_wire_guid(canonical))
 }
 
 fn parse_mac(value: &str) -> Result<[u8; 6], io::Error> {
@@ -121,6 +122,7 @@ fn parse_hex<const N: usize>(bytes: impl Iterator<Item = u8>) -> Result<[u8; N],
 }
 
 pub(super) fn format_guid(value: &[u8; 16]) -> String {
+    let value = wire_to_canonical_guid(*value);
     format!(
         "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
         value[0],
@@ -140,6 +142,17 @@ pub(super) fn format_guid(value: &[u8; 16]) -> String {
         value[14],
         value[15]
     )
+}
+
+pub(super) fn canonical_to_wire_guid(mut value: [u8; 16]) -> [u8; 16] {
+    value[..4].reverse();
+    value[4..6].reverse();
+    value[6..8].reverse();
+    value
+}
+
+fn wire_to_canonical_guid(value: [u8; 16]) -> [u8; 16] {
+    canonical_to_wire_guid(value)
 }
 
 fn format_mac(value: [u8; 6]) -> String {

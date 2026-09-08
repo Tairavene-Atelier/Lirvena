@@ -39,12 +39,12 @@ impl OnlineDevice {
             || !valid_text(&operating_system_version, MAX_DEVICE_TEXT_LEN, true)
             || !valid_text(&vendor_operating_system, MAX_DEVICE_TEXT_LEN, false)
             || !valid_text(&client_version, MAX_VERSION_LEN, false)
-            || battery_state > 100
+            || !valid_battery_state(battery_state)
         {
             return Err(OnlinePacketError);
         }
         Ok(Self {
-            guid_hex: guid_hex.to_ascii_uppercase(),
+            guid_hex: guid_hex.to_ascii_lowercase(),
             name,
             operating_system,
             operating_system_version,
@@ -176,4 +176,8 @@ fn valid_text(value: &str, maximum: usize, allow_empty: bool) -> bool {
     (allow_empty || !value.is_empty())
         && value.len() <= maximum
         && !value.chars().any(char::is_control)
+}
+
+pub(crate) const fn valid_battery_state(value: u32) -> bool {
+    value & !0xff == 0 && value & 0x7f <= 100
 }
