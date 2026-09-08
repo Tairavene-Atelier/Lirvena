@@ -1,8 +1,12 @@
 //! QQ TEA golden-vector and rejection tests.
 
+mod common;
+
 use qq_envelope::{
     QqTeaError, QqTeaKey, decrypt_qq_tea, encrypt_qq_tea, encrypt_qq_tea_with_padding,
 };
+
+use common::decode_hex;
 
 #[test]
 fn deterministic_vector_and_round_trip_match() -> Result<(), Box<dyn std::error::Error>> {
@@ -22,6 +26,22 @@ fn deterministic_vector_and_round_trip_match() -> Result<(), Box<dyn std::error:
         ]
     );
     assert_eq!(decrypt_qq_tea(&encrypted, &key)?, plaintext);
+    Ok(())
+}
+
+#[test]
+fn decrypts_frozen_csharp_provider_ciphertext() -> Result<(), Box<dyn std::error::Error>> {
+    let key = QqTeaKey::new([
+        0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e,
+        0x8f,
+    ]);
+    let ciphertext = decode_hex(
+        "986508441246f9e85d877e9ab5ed6778c0118046af23806ed7e192931feb3c75d5952cf7654640a57eb1d291f660656951aba9ecbe71889bc4a8c09311bdef5f2ba6210d82de01ee3a256d1899a8868ebcbaabeae1b84596",
+    )?;
+    assert_eq!(
+        decrypt_qq_tea(&ciphertext, &key)?,
+        (0_u8..=72).collect::<Vec<_>>()
+    );
     Ok(())
 }
 

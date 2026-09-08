@@ -7,19 +7,20 @@ use qq_domain::LoginMachine;
 use qq_envelope::QqTeaKey;
 use qq_login::{
     LinuxKeyAgreement, QrChallenge, QrDevice, QrLoginSecrets, QrPollContext, QrPollResponse,
-    QrPollState, QrResponseContext, apply_qr_poll, build_qr_poll, decode_qr_poll_response,
+    QrPollState, QrResponseContext, WtLoginSequence, apply_qr_poll, build_qr_poll,
+    decode_qr_poll_response,
 };
 use qq_profile::LinuxNtProfile;
 use qq_transport::QqTransport;
 use tokio::net::TcpStream;
 
 use super::ceylith::OpaqueOperation;
+use super::face::FaceResolver;
 use super::qq::execute_request;
 use crate::support::{now_ms, now_seconds, random_nonzero_u32};
 
 const QR_POLL_INTERVAL: Duration = Duration::from_secs(2);
 
-#[derive(Clone, Copy)]
 pub(super) struct QrPolling<'a> {
     pub profile: &'a LinuxNtProfile,
     pub device: &'a QrDevice,
@@ -27,13 +28,15 @@ pub(super) struct QrPolling<'a> {
     pub key_agreement: &'a LinuxKeyAgreement,
     pub account_slot_id: AccountSlotId,
     pub challenge: &'a QrChallenge,
+    pub face: &'a FaceResolver,
     pub expires_at_ms: u64,
+    pub wtlogin_sequence: &'a mut WtLoginSequence,
 }
 
 pub(super) async fn until_confirmed(
     ceylith: &InstallationClient,
     qq: &mut QqTransport<TcpStream>,
-    polling: QrPolling<'_>,
+    mut polling: QrPolling<'_>,
     login: &mut LoginMachine,
 ) -> Result<QrLoginSecrets, Box<dyn std::error::Error>> {
     loop {
@@ -42,9 +45,19 @@ pub(super) async fn until_confirmed(
             let _event = apply_qr_poll(login, QrPollState::Expired, now_ms()?)?;
             return Err(io::Error::new(io::ErrorKind::TimedOut, "QQ QR code expired").into());
         }
-        let response = poll_once(ceylith, qq, polling).await?;
+        let bound_uin = polling
+            .face
+            .resolve(
+                polling.profile.app_id(),
+                polling.challenge.query_signature(),
+            )
+            .await?;
+        let response = poll_once(ceylith, qq, &mut polling).await?;
         match response {
             QrPollResponse::Confirmed(secrets) => {
+                if bound_uin != u32::try_from(secrets.uin()).ok() {
+                    return Err(io::Error::other("QQ QR identity binding mismatch").into());
+                }
                 let _event = apply_qr_poll(login, QrPollState::Confirmed, now_ms()?)?;
                 return Ok(secrets);
             }
@@ -70,11 +83,12 @@ async fn wait_for_poll() -> Result<(), io::Error> {
 async fn poll_once(
     ceylith: &InstallationClient,
     qq: &mut QqTransport<TcpStream>,
-    polling: QrPolling<'_>,
+    polling: &mut QrPolling<'_>,
 ) -> Result<QrPollResponse, Box<dyn std::error::Error>> {
     let unsigned = build_qr_poll(QrPollContext {
         profile: polling.profile,
         sso_sequence: random_nonzero_u32()?,
+        wtlogin_sequence: polling.wtlogin_sequence.take(),
         unix_seconds: now_seconds()?,
         random_key: polling.random_key,
         key_agreement: polling.key_agreement,

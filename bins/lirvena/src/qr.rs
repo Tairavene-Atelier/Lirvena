@@ -2,6 +2,7 @@ mod ceylith;
 mod continuity;
 mod credential;
 mod daemon;
+mod face;
 mod flow;
 mod polling;
 mod qq;

@@ -51,22 +51,19 @@ fn fetch_response_yields_redacted_artifact_and_challenge() -> Result<(), Box<dyn
 }
 
 #[test]
-fn nonzero_internal_sequence_is_fail_closed() -> Result<(), Box<dyn std::error::Error>> {
+fn response_accepts_frozen_nonzero_internal_sequence() -> Result<(), Box<dyn std::error::Error>> {
     let agreement = FakeAgreement(QqTeaKey::new([8; 16]));
     let random_key = QqTeaKey::new([9; 16]);
     let payload = response_packet(&agreement, 20)?;
-    assert!(
-        decode_qr_fetch_response(
-            &payload,
-            QrResponseContext {
-                app_id: 1_001,
-                issued_at_ms: 1_000,
-                random_key: &random_key,
-                key_agreement: &agreement,
-            },
-        )
-        .is_err()
-    );
+    decode_qr_fetch_response(
+        &payload,
+        QrResponseContext {
+            app_id: 1_001,
+            issued_at_ms: 1_000,
+            random_key: &random_key,
+            key_agreement: &agreement,
+        },
+    )?;
     Ok(())
 }
 

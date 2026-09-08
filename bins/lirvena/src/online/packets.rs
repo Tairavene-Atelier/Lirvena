@@ -1,5 +1,8 @@
+use std::collections::BTreeSet;
 use std::io;
+use std::sync::Mutex;
 
+use qq_domain::DevicePower;
 use qq_login::{CredentialLogin, QrDevice};
 use qq_online::{
     HeartbeatInput, HeartbeatOutcome, InfoSyncInput, InfoSyncOutcome, OnlineDevice,
@@ -19,6 +22,7 @@ pub(super) struct PacketRuntime {
     device_guid_hex: String,
     locale_id: u32,
     state: OnlineSyncState,
+    identity_routes: Mutex<BTreeSet<String>>,
 }
 
 pub(super) struct PacketContext<'a> {
@@ -53,20 +57,27 @@ impl PacketRuntime {
         let locale_id = u32::try_from(plan.tuning().spec().locale_id)
             .map_err(|_error| io::Error::other("Profile locale exceeds u32"))?;
         let device_guid_hex = encode_hex(device.guid());
+        let battery_state = match device.profile().power() {
+            DevicePower::Desktop => 0,
+            DevicePower::Portable { percent, charging } => {
+                u32::from(percent) | if charging { 0x80 } else { 0 }
+            }
+        };
         Ok(Self {
             plan,
             device: OnlineDevice::new(
                 &device_guid_hex,
-                device.name().to_owned(),
+                device.device_name().to_owned(),
                 profile.operating_system().to_owned(),
-                String::new(),
+                device.profile().system_kernel().to_owned(),
                 profile.operating_system().to_ascii_lowercase(),
                 profile.client_version().to_owned(),
-                100,
+                battery_state,
             )?,
             device_guid_hex,
             locale_id,
             state: OnlineSyncState::default(),
+            identity_routes: Mutex::new(BTreeSet::new()),
         })
     }
 
@@ -79,13 +90,15 @@ impl PacketRuntime {
     }
 
     pub(super) async fn acknowledge_push(
-        &self,
+        &mut self,
         qq: &mut AuthenticatedSession<TcpStream>,
         profile: &LinuxNtProfile,
         auth: &qq_envelope::SessionAuth<'_>,
+        account_identity: &str,
         route: &str,
         body: &[u8],
     ) -> Result<(), Box<dyn std::error::Error>> {
+        let include_identity = self.mark_identity_route(route)?;
         let request = QqRequest {
             auth,
             sequence: random_nonzero_u32()?,
@@ -93,6 +106,8 @@ impl PacketRuntime {
             command: route,
             device_guid_hex: self.device_guid_hex.as_bytes(),
             reserve: &[],
+            account_identity: Some(account_identity),
+            include_identity,
             payload: body,
         };
         let frame = prepare(profile, &request)?;
@@ -188,6 +203,8 @@ impl PacketRuntime {
                 command,
                 device_guid_hex: self.device_guid_hex.as_bytes(),
                 reserve,
+                account_identity: Some(context.credential.uid()),
+                include_identity: false,
                 payload,
             },
         )
@@ -200,7 +217,26 @@ impl PacketRuntime {
         command: &str,
         payload: &[u8],
     ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        self.send_with_reserve(context, command, &[], payload).await
+        let include_identity = self.mark_identity_route(command)?;
+        let key = session_key(context.credential)?;
+        let auth = authenticated(context.uin, context.credential, &key)?;
+        execute(
+            context.qq,
+            context.profile,
+            context.push_plan,
+            QqRequest {
+                auth: &auth,
+                sequence: random_nonzero_u32()?,
+                locale_id: self.locale_id,
+                command,
+                device_guid_hex: self.device_guid_hex.as_bytes(),
+                reserve: &[],
+                account_identity: Some(context.credential.uid()),
+                include_identity,
+                payload,
+            },
+        )
+        .await
     }
 
     fn apply_silence(&mut self, local: Option<u32>, version: Option<u32>) {
@@ -210,5 +246,12 @@ impl PacketRuntime {
         if let Some(value) = version {
             self.state.silence_version = value;
         }
+    }
+
+    fn mark_identity_route(&self, route: &str) -> Result<bool, io::Error> {
+        self.identity_routes
+            .lock()
+            .map(|mut routes| routes.insert(route.to_owned()))
+            .map_err(|_error| io::Error::other("packet route state is unavailable"))
     }
 }

@@ -5,7 +5,7 @@ use ceylith_protocol::AccountSlotId;
 use qq_envelope::QqTeaKey;
 use qq_login::{
     CredentialExchangeContext, CredentialExchangeOutcome, CredentialLogin,
-    CredentialResponseContext, LinuxKeyAgreement, QrDevice, QrLoginSecrets,
+    CredentialResponseContext, LinuxKeyAgreement, QrDevice, QrLoginSecrets, WtLoginSequence,
     build_credential_exchange, decode_credential_exchange_response,
 };
 use qq_profile::LinuxNtProfile;
@@ -23,6 +23,7 @@ pub(super) async fn exchange(
     device: &QrDevice,
     account_slot_id: AccountSlotId,
     qr_secrets: &QrLoginSecrets,
+    wtlogin_sequence: &mut WtLoginSequence,
 ) -> Result<CredentialLogin, Box<dyn std::error::Error>> {
     let key_agreement = LinuxKeyAgreement::new(profile_peer(profile)?)?;
     let random_key = QqTeaKey::new(random_array()?);
@@ -30,6 +31,7 @@ pub(super) async fn exchange(
         profile,
         device,
         sso_sequence: random_nonzero_u32()?,
+        wtlogin_sequence: wtlogin_sequence.take(),
         random_key: &random_key,
         key_agreement: &key_agreement,
         secrets: qr_secrets,
@@ -51,13 +53,22 @@ pub(super) async fn exchange(
             key_agreement: &key_agreement,
             tgtgt_key: qr_secrets.tgtgt_key(),
         },
-    )?;
+    )
+    .map_err(|error| {
+        io::Error::other(format!(
+            "QQ credential response validation failed: {error:?}"
+        ))
+    })?;
     match outcome {
         CredentialExchangeOutcome::Success(login) => Ok(login),
-        CredentialExchangeOutcome::Rejected(rejection) => Err(io::Error::other(format!(
-            "QQ rejected credential exchange with state {}",
-            rejection.state()
-        ))
-        .into()),
+        CredentialExchangeOutcome::Rejected(rejection) => {
+            let tag = rejection.tag().unwrap_or("<none>");
+            let message = rejection.message().unwrap_or("<none>");
+            Err(io::Error::other(format!(
+                "QQ rejected credential exchange with state {}, tag {tag:?}, message {message:?}",
+                rejection.state()
+            ))
+            .into())
+        }
     }
 }

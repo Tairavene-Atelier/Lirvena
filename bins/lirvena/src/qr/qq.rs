@@ -32,6 +32,8 @@ pub(super) async fn execute_request(
             command: unsigned.command(),
             device_guid_hex: device_guid_hex.as_bytes(),
             reserve: &reserve,
+            account_identity: None,
+            include_identity: false,
             payload: unsigned.payload(),
         },
     )

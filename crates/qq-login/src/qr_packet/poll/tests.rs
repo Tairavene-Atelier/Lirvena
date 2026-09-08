@@ -3,7 +3,9 @@ use qq_envelope::{QqTeaKey, encrypt_qq_tea};
 use qq_profile::{LinuxNtProfile, LinuxNtProfileSpec};
 use qq_wire::{LengthPrefix, WireWriter};
 
-use super::{QrPollContext, QrPollResponse, build_qr_poll, decode_qr_poll_response};
+use super::{
+    QrPollContext, QrPollResponse, build_poll_body, build_qr_poll, decode_qr_poll_response,
+};
 use crate::{QqKeyAgreement, QrChallenge, QrResponseContext};
 
 struct FakeAgreement(QqTeaKey);
@@ -28,6 +30,7 @@ fn poll_request_and_confirmed_response_preserve_required_values()
     let request = build_qr_poll(QrPollContext {
         profile: &profile,
         sso_sequence: 30,
+        wtlogin_sequence: 1,
         unix_seconds: 1_700_000_002,
         random_key: &random_key,
         key_agreement: &agreement,
@@ -75,6 +78,48 @@ fn pending_response_accepts_bounded_generation_tail() -> Result<(), Box<dyn std:
         QrPollResponse::State(crate::QrPollState::WaitingForScan)
     ));
     Ok(())
+}
+
+#[test]
+fn poll_body_matches_frozen_52194_plaintext() -> Result<(), Box<dyn std::error::Error>> {
+    let spec = LinuxNtProfileSpec {
+        profile_id: ProfileId::from_bytes([9; 16]),
+        client_version: "3.2.32-52194".to_owned(),
+        app_id: 1_600_001_615,
+        sub_app_id: 537_379_447,
+        qr_app_id: 537_379_447,
+        app_client_version: 52_194,
+        package_name: "com.tencent.qq".to_owned(),
+        operating_system: "Linux".to_owned(),
+        pt_version: "2.0.0".to_owned(),
+        sso_version: 19,
+        misc_bitmap: 32_764,
+        login_sdk: "nt.wtlogin.0.0.1".to_owned(),
+        main_sig_map: 169_742_560,
+        sub_sig_map: 0,
+        login_misc_bitmap: 12_058_620,
+        runtime_abi: 2,
+    };
+    let profile = LinuxNtProfile::new(spec, OpaqueSlots::default())?;
+    let challenge = QrChallenge::for_test((0x60..0x78).collect(), "query-value".to_owned());
+    assert_eq!(
+        build_poll_body(&profile, &challenge)?,
+        decode_hex(
+            "00005f5e164f0018606162636465666768696a6b6c6d6e6f707172737475767700000000000000000000000000"
+        )?
+    );
+    Ok(())
+}
+
+fn decode_hex(value: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    value
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| {
+            let text = core::str::from_utf8(pair)?;
+            Ok(u8::from_str_radix(text, 16)?)
+        })
+        .collect()
 }
 
 fn profile() -> Result<LinuxNtProfile, Box<dyn std::error::Error>> {

@@ -129,6 +129,61 @@ fn response_decoders_keep_only_bounded_transition_values() -> TestResult {
     Ok(())
 }
 
+#[test]
+fn status_register_matches_frozen_52194_device_projection() -> TestResult {
+    let tuning = OnlinePacketTuning::new(OnlinePacketTuningSpec {
+        sync_flag: 0x6df,
+        locale_id: 2_052,
+        initial_vendor_type: 6,
+        initial_register_type: 0,
+        status_vendor_type: 0,
+        status_register_type: 1,
+        auxiliary_flag: 2,
+        heartbeat_type: 1,
+    })?;
+    let device = OnlineDevice::new(
+        "33221100554477668899aabbccddeeff",
+        "uos-office-42".to_owned(),
+        "Linux".to_owned(),
+        "Linux 5.15.0-139-generic".to_owned(),
+        "linux".to_owned(),
+        "3.2.32-52194".to_owned(),
+        0xd5,
+    )?;
+    let actual = encode_register(RegisterInput {
+        device: &device,
+        state: OnlineSyncState::default(),
+        tuning,
+    })?;
+    let expected = hex(
+        "0a20333332323131303035353434373736363838393961616262636364646565666610001a0c332e322e33322d3532313934200028841032390a0d756f732d6f66666963652d343212054c696e75781a184c696e757820352e31352e302d3133392d67656e6572696322002a056c696e757838004000480152040801100158d50160017200800100880100900100",
+    )?;
+    assert_eq!(actual, expected);
+    Ok(())
+}
+
+#[test]
+fn battery_state_accepts_the_frozen_charging_bit_and_rejects_invalid_percentage() -> TestResult {
+    let state = OnlineSyncState::default();
+    let encoded = encode_heartbeat(HeartbeatInput {
+        state,
+        tuning: tuning()?,
+        unix_seconds: 1_800_000_000,
+        battery_state: 0xd5,
+    })?;
+    assert!(!encoded.is_empty());
+    assert!(
+        encode_heartbeat(HeartbeatInput {
+            state,
+            tuning: tuning()?,
+            unix_seconds: 1_800_000_000,
+            battery_state: 0xe5,
+        })
+        .is_err()
+    );
+    Ok(())
+}
+
 fn hex(value: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     value
         .as_bytes()

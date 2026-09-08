@@ -24,7 +24,7 @@ pub enum DevicePower {
 pub struct DeviceProfile {
     guid: [u8; 16],
     mac_address: [u8; 6],
-    name: String,
+    device_name: String,
     model: String,
     system_kernel: String,
     kernel_version: String,
@@ -41,13 +41,13 @@ impl DeviceProfile {
     pub fn new(
         guid: [u8; 16],
         mac_address: [u8; 6],
-        name: String,
+        device_name: String,
         model: String,
         system_kernel: String,
         kernel_version: String,
         power: DevicePower,
     ) -> Result<Self, DeviceProfileError> {
-        let text = [&name, &model, &system_kernel, &kernel_version];
+        let text = [&device_name, &model, &system_kernel, &kernel_version];
         let invalid_power = matches!(power, DevicePower::Portable { percent, .. } if percent > 100);
         if guid == [0; 16]
             || mac_address == [0; 6]
@@ -61,7 +61,7 @@ impl DeviceProfile {
         Ok(Self {
             guid,
             mac_address,
-            name,
+            device_name,
             model,
             system_kernel,
             kernel_version,
@@ -82,9 +82,9 @@ impl DeviceProfile {
     }
 
     #[must_use]
-    /// Returns the user-managed device name.
-    pub fn name(&self) -> &str {
-        &self.name
+    /// Returns the user-managed name presented in QQ login and online packets.
+    pub fn device_name(&self) -> &str {
+        &self.device_name
     }
 
     #[must_use]
@@ -140,10 +140,10 @@ mod tests {
         let profile = DeviceProfile::new(
             [1; 16],
             [2, 0, 0, 0, 0, 1],
-            "Lirvena device".to_owned(),
-            "Synthetic desktop".to_owned(),
-            "Linux".to_owned(),
-            "6.8.0-generic".to_owned(),
+            "uos-office-42".to_owned(),
+            "Lenovo ThinkCentre M720q".to_owned(),
+            "Linux 5.10.0-amd64-desktop".to_owned(),
+            "5.10.0-amd64-desktop".to_owned(),
             DevicePower::Desktop,
         );
         assert!(profile.is_ok());
@@ -155,10 +155,10 @@ mod tests {
             DeviceProfile::new(
                 [1; 16],
                 [3, 0, 0, 0, 0, 1],
-                "Lirvena device".to_owned(),
-                "Synthetic portable".to_owned(),
-                "Linux".to_owned(),
-                "6.8.0-generic".to_owned(),
+                "xps-dev-42".to_owned(),
+                "Dell XPS 13 9310".to_owned(),
+                "Linux 5.15.0-139-generic".to_owned(),
+                "5.15.0-139-generic".to_owned(),
                 DevicePower::Portable {
                     percent: 101,
                     charging: true,

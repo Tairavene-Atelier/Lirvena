@@ -69,7 +69,7 @@ impl std::error::Error for TicketRuntimeError {}
 
 impl TicketRuntime {
     pub(super) fn new() -> Result<Self, TicketRuntimeError> {
-        ensure_crypto_provider()?;
+        crate::support::ensure_rustls_provider().map_err(|_error| TicketRuntimeError)?;
         let jar = Arc::new(Jar::default());
         let client = Client::builder()
             .cookie_provider(jar.clone())
@@ -333,16 +333,6 @@ impl TicketRuntime {
         }
         Err(AccountActionError::QqFailure)
     }
-}
-
-fn ensure_crypto_provider() -> Result<(), TicketRuntimeError> {
-    if rustls::crypto::CryptoProvider::get_default().is_none() {
-        let _result = rustls::crypto::ring::default_provider().install_default();
-    }
-    rustls::crypto::CryptoProvider::get_default()
-        .is_some()
-        .then_some(())
-        .ok_or(TicketRuntimeError)
 }
 
 struct CachedSecret {

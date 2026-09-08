@@ -1,8 +1,8 @@
 use std::io;
 
 use qq_envelope::{
-    ExpectedSsoResponse, QqTeaKey, SessionAuth, SessionRequestParts, decode_session_response,
-    encode_session_request,
+    ExpectedSsoResponse, QqTeaKey, SessionAuth, SessionRequestParts, attach_account_identity,
+    decode_session_response, encode_account_reserve, encode_session_request,
 };
 use qq_login::CredentialLogin;
 use qq_profile::{LinuxNtProfile, PushPlan};
@@ -16,6 +16,8 @@ pub(crate) struct QqRequest<'a> {
     pub command: &'a str,
     pub device_guid_hex: &'a [u8],
     pub reserve: &'a [u8],
+    pub account_identity: Option<&'a str>,
+    pub include_identity: bool,
     pub payload: &'a [u8],
 }
 
@@ -86,6 +88,17 @@ pub(crate) fn prepare(
     profile: &LinuxNtProfile,
     request: &QqRequest<'_>,
 ) -> Result<Vec<u8>, qq_envelope::EnvelopeError> {
+    let completed_reserve = request
+        .account_identity
+        .map(|identity| {
+            if request.reserve.is_empty() {
+                encode_account_reserve(identity, request.include_identity)
+            } else {
+                attach_account_identity(request.reserve, identity)
+            }
+        })
+        .transpose()?;
+    let reserve = completed_reserve.as_deref().unwrap_or(request.reserve);
     encode_session_request(SessionRequestParts {
         auth: request.auth,
         sequence: request.sequence,
@@ -94,7 +107,7 @@ pub(crate) fn prepare(
         command: request.command,
         device_guid_hex: request.device_guid_hex,
         client_version: profile.client_version(),
-        reserve: request.reserve,
+        reserve,
         payload: request.payload,
     })
 }

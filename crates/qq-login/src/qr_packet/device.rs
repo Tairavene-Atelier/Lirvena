@@ -24,8 +24,8 @@ impl QrDevice {
 
     /// Returns the user-facing device name.
     #[must_use]
-    pub fn name(&self) -> &str {
-        self.profile.name()
+    pub fn device_name(&self) -> &str {
+        self.profile.device_name()
     }
 
     /// Returns the complete validated external device profile.
@@ -40,7 +40,7 @@ impl core::fmt::Debug for QrDevice {
         formatter
             .debug_struct("QrDevice")
             .field("guid", &"<redacted>")
-            .field("name_len", &self.profile.name().len())
+            .field("device_name_len", &self.profile.device_name().len())
             .field("mac_address", &"<redacted>")
             .field("model_len", &self.profile.model().len())
             .finish()

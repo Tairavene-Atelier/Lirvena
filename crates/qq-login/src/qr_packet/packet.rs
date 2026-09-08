@@ -53,6 +53,7 @@ pub(super) fn build_request_data(
 
 pub(super) fn build_wtlogin_packet(
     profile: &LinuxNtProfile,
+    wtlogin_sequence: u16,
     random_key: &QqTeaKey,
     public_key: &[u8],
     encrypted: &[u8],
@@ -60,7 +61,7 @@ pub(super) fn build_wtlogin_packet(
     let mut body = WireWriter::new(MAX_LOGIN_PACKET_LEN);
     body.put_u16(8_001)?;
     body.put_u16(WTLOGIN_COMMAND)?;
-    body.put_u16(0)?;
+    body.put_u16(wtlogin_sequence)?;
     body.put_u32(0)?;
     body.put_u8(3)?;
     body.put_u8(135)?;
