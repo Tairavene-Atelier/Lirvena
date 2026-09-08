@@ -156,7 +156,42 @@ fn status_register_matches_frozen_52194_device_projection() -> TestResult {
         tuning,
     })?;
     let expected = hex(
-        "0a20333332323131303035353434373736363838393961616262636364646565666610001a0c332e322e33322d3532313934200028841032390a0d756f732d6f66666963652d343212054c696e75781a184c696e757820352e31352e302d3133392d67656e6572696322002a056c696e757838004000480152040801100158d50160017200800100880100900100",
+        "0a20333332323131303035353434373736363838393961616262636364646565666610001a0c332e322e33322d3532313934200028841032390a0d756f732d6f66666963652d343212054c696e75781a184c696e757820352e31352e302d3133392d67656e6572696322002a056c696e757838004000480152040801100158d50160017200800108880100900100",
+    )?;
+    assert_eq!(actual, expected);
+    Ok(())
+}
+
+#[test]
+fn initial_info_sync_matches_frozen_52194_default_state() -> TestResult {
+    let tuning = OnlinePacketTuning::new(OnlinePacketTuningSpec {
+        sync_flag: 0x6df,
+        locale_id: 2_052,
+        initial_vendor_type: 6,
+        initial_register_type: 0,
+        status_vendor_type: 0,
+        status_register_type: 1,
+        auxiliary_flag: 2,
+        heartbeat_type: 1,
+    })?;
+    let device = OnlineDevice::new(
+        "33221100554477668899aabbccddeeff",
+        "uos-office-42".to_owned(),
+        "Linux".to_owned(),
+        "Linux 5.15.0-139-generic".to_owned(),
+        "linux".to_owned(),
+        "3.2.32-52194".to_owned(),
+        0,
+    )?;
+    let actual = encode_info_sync(InfoSyncInput {
+        device: &device,
+        state: OnlineSyncState::default(),
+        tuning,
+        request_random: 7,
+        delayed: false,
+    })?;
+    let expected = hex(
+        "08df0d10072002280032040a001a0042004a8d010a20333332323131303035353434373736363838393961616262636364646565666610001a0c332e322e33322d3532313934200128841032390a0d756f732d6f66666963652d343212054c696e75781a184c696e757820352e31352e302d3133392d67656e6572696322002a056c696e75783800400648005204080110015800600172008001088801009001005204080010025a06080010001800",
     )?;
     assert_eq!(actual, expected);
     Ok(())
