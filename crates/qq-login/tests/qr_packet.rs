@@ -90,7 +90,7 @@ fn fetch_body_has_bounded_wtlogin_and_encrypted_transaction()
     assert_eq!(packet.read_u8()?, 3);
     assert_eq!(packet.read_u8()?, 135);
     assert_eq!(packet.read_u32()?, 0);
-    assert_eq!(packet.read_u8()?, 2);
+    assert_eq!(packet.read_u8()?, 19);
     assert_eq!(packet.read_u16()?, 0);
     assert_eq!(packet.read_u16()?, 456);
     assert_eq!(packet.read_u32()?, 0);

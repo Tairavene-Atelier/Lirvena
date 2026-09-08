@@ -1,6 +1,18 @@
 use qq_domain::DevicePower;
 
-use super::{load_or_generate, schema::format_guid};
+use super::{
+    load_or_generate,
+    schema::{decode, format_guid},
+};
+
+#[test]
+fn checked_in_example_matches_the_current_schema() -> Result<(), Box<dyn std::error::Error>> {
+    let device = decode(include_bytes!("../../../../../device.example.json"))?;
+    assert_eq!(device.device_name(), "uos-office-42");
+    assert_eq!(device.portrait().device_name(), "ThinkCentre M720q");
+    assert_eq!(device.model(), "Lenovo ThinkCentre M720q");
+    Ok(())
+}
 
 #[test]
 fn generates_then_reuses_user_managed_profile() -> Result<(), Box<dyn std::error::Error>> {

@@ -5,6 +5,7 @@ use qq_wire::{LengthPrefix, WireWriter};
 use crate::QrPacketError;
 
 const WTLOGIN_COMMAND: u16 = 2_066;
+const ECDH_PUBLIC_ID: u8 = 19;
 const MAX_LOGIN_PACKET_LEN: usize = 64 * 1024;
 
 pub(super) fn build_transaction(command: u16, body: &[u8]) -> Result<Vec<u8>, QrPacketError> {
@@ -66,7 +67,7 @@ pub(super) fn build_wtlogin_packet(
     body.put_u8(3)?;
     body.put_u8(135)?;
     body.put_u32(0)?;
-    body.put_u8(2)?;
+    body.put_u8(ECDH_PUBLIC_ID)?;
     body.put_u16(0)?;
     body.put_u16(profile.app_client_version())?;
     body.put_u32(0)?;
