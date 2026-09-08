@@ -61,13 +61,13 @@ pub fn decode_credential_exchange_response(
     context: CredentialResponseContext<'_>,
 ) -> Result<CredentialExchangeOutcome, CredentialExchangeError> {
     if payload.len() > MAX_LOGIN_PACKET_LEN || context.uin == 0 {
-        return Err(CredentialExchangeError::InvalidField);
+        return Err(CredentialExchangeError::InvalidResponseEnvelope);
     }
     let tgtgt_key = key_from_slice(context.tgtgt_key)?;
     let body = decrypt_response_body(payload, context)?;
     let mut reader = WireReader::new(&body);
     if reader.read_u16()? != INTERNAL_COMMAND {
-        return Err(CredentialExchangeError::InvalidField);
+        return Err(CredentialExchangeError::InvalidResponseCommand);
     }
     let state = reader.read_u8()?;
     let outcome = if state == 0 {
@@ -89,21 +89,21 @@ fn decrypt_response_body(
         || reader.read_u16()? != WTLOGIN_VERSION
         || reader.read_u16()? != WTLOGIN_COMMAND
     {
-        return Err(CredentialExchangeError::InvalidField);
+        return Err(CredentialExchangeError::InvalidResponseEnvelope);
     }
     let _sequence = reader.read_u16()?;
     if reader.read_u32()? != context.uin {
-        return Err(CredentialExchangeError::InvalidField);
+        return Err(CredentialExchangeError::InvalidResponseAccount);
     }
     let _flag = reader.read_u8()?;
     let _retry = reader.read_u16()?;
     let encrypted_len = reader
         .remaining()
         .checked_sub(1)
-        .ok_or(CredentialExchangeError::InvalidField)?;
+        .ok_or(CredentialExchangeError::InvalidResponseEnvelope)?;
     let encrypted = reader.read_bytes(encrypted_len)?;
     if reader.read_u8()? != 3 {
-        return Err(CredentialExchangeError::InvalidField);
+        return Err(CredentialExchangeError::InvalidResponseEnvelope);
     }
     reader.finish()?;
     decrypt_qq_tea(encrypted, context.key_agreement.tea_key()).map_err(Into::into)
@@ -124,7 +124,7 @@ fn decode_success(
     let uid = decode_uid(required_tlv(&nested, 0x543)?)?;
     let d2_key = required_nonempty(&nested, 0x305)?;
     if d2_key.len() != QqTeaKey::LENGTH {
-        return Err(CredentialExchangeError::InvalidField);
+        return Err(CredentialExchangeError::InvalidResponseSessionKey);
     }
     let secrets = CredentialSessionSecrets::new(
         d2_key,
@@ -162,14 +162,14 @@ fn read_tlv_collection<'a>(
 ) -> Result<BTreeMap<u16, &'a [u8]>, CredentialExchangeError> {
     let count = usize::from(reader.read_u16()?);
     if count == 0 || count > MAX_TLV_COUNT {
-        return Err(CredentialExchangeError::InvalidField);
+        return Err(CredentialExchangeError::InvalidResponseTlvs);
     }
     let mut values = BTreeMap::new();
     for _index in 0..count {
         let tag = reader.read_u16()?;
         let body = reader.read_prefixed_bytes(LengthPrefix::U16Payload, MAX_TLV_LEN)?;
         if values.insert(tag, body).is_some() {
-            return Err(CredentialExchangeError::InvalidField);
+            return Err(CredentialExchangeError::InvalidResponseTlvs);
         }
     }
     Ok(values)
@@ -177,25 +177,29 @@ fn read_tlv_collection<'a>(
 
 fn decode_profile(body: &[u8]) -> Result<(u8, u8, String), CredentialExchangeError> {
     let mut reader = WireReader::new(body);
-    let _face = reader.read_u16()?;
-    let age = reader.read_u8()?;
-    let gender = reader.read_u8()?;
-    let nickname = reader.read_prefixed_bytes(LengthPrefix::U8Payload, u8::MAX.into())?;
-    reader.finish()?;
-    Ok((age, gender, decode_text(nickname)?))
+    let parsed = (|| {
+        let _face = reader.read_u16()?;
+        let age = reader.read_u8()?;
+        let gender = reader.read_u8()?;
+        let nickname = reader.read_prefixed_bytes(LengthPrefix::U8Payload, u8::MAX.into())?;
+        reader.finish()?;
+        Ok((age, gender, decode_text(nickname)?))
+    })();
+    parsed
+        .map_err(|_error: CredentialExchangeError| CredentialExchangeError::InvalidResponseProfile)
 }
 
 fn decode_uid(body: &[u8]) -> Result<String, CredentialExchangeError> {
     if body.len() > MAX_UID_PROTO_LEN {
-        return Err(CredentialExchangeError::InvalidField);
+        return Err(CredentialExchangeError::InvalidResponseUid);
     }
     let uid = UidEnvelope::decode(body)
-        .map_err(|_error| CredentialExchangeError::InvalidField)?
+        .map_err(|_error| CredentialExchangeError::InvalidResponseUid)?
         .layer_one
         .and_then(|layer| layer.layer_two)
         .map(|layer| layer.uid)
         .filter(|uid| !uid.is_empty() && uid.len() <= MAX_NOTICE_LEN)
-        .ok_or(CredentialExchangeError::InvalidField)?;
+        .ok_or(CredentialExchangeError::InvalidResponseUid)?;
     Ok(uid)
 }
 
@@ -228,7 +232,7 @@ fn required_tlv<'a>(
     values
         .get(&tag)
         .copied()
-        .ok_or(CredentialExchangeError::InvalidField)
+        .ok_or(CredentialExchangeError::InvalidResponseTlvs)
 }
 
 fn required_nonempty<'a>(
@@ -237,7 +241,7 @@ fn required_nonempty<'a>(
 ) -> Result<&'a [u8], CredentialExchangeError> {
     required_tlv(values, tag).and_then(|body| {
         if body.is_empty() {
-            Err(CredentialExchangeError::InvalidField)
+            Err(CredentialExchangeError::InvalidResponseTlvs)
         } else {
             Ok(body)
         }
