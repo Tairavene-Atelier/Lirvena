@@ -56,7 +56,7 @@ fn fetch_body_has_bounded_wtlogin_and_encrypted_transaction()
     let device = QrDevice::new(DeviceProfile::new(
         [0x11; 16],
         [2, 0, 0, 0, 0, 1],
-        "Lirvena-Test".to_owned(),
+        "lirvena-test".to_owned(),
         "Synthetic desktop".to_owned(),
         "Linux".to_owned(),
         "6.8.0-generic".to_owned(),
@@ -135,7 +135,7 @@ fn unsigned_body_accepts_injected_reserve_before_outer_encryption()
     let device = QrDevice::new(DeviceProfile::new(
         [0x22; 16],
         [2, 0, 0, 0, 0, 2],
-        "Lirvena-Test".to_owned(),
+        "lirvena-test".to_owned(),
         "Synthetic desktop".to_owned(),
         "Linux".to_owned(),
         "6.8.0-generic".to_owned(),
