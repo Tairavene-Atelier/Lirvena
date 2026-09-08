@@ -1,8 +1,9 @@
 use qq_envelope::{QqTeaKey, encrypt_qq_tea};
 use qq_profile::LinuxNtProfile;
-use qq_wire::{LengthPrefix, WireWriter};
+use qq_wire::WireWriter;
 
 use super::tlv::build_login_tlvs;
+use crate::wtlogin::{self, WtLoginPacket};
 use crate::{CredentialExchangeError, QqKeyAgreement, QrDevice, QrLoginSecrets};
 
 const MAX_LOGIN_PACKET_LEN: usize = 64 * 1024;
@@ -100,47 +101,18 @@ pub fn build_credential_exchange(
         uin,
     )?)?;
     let encrypted = encrypt_qq_tea(&plaintext.finish(), context.key_agreement.tea_key())?;
-    let payload = build_packet(context, uin, &encrypted)?;
+    let payload = wtlogin::encode(WtLoginPacket {
+        profile: context.profile,
+        command: WTLOGIN_COMMAND,
+        sequence: context.wtlogin_sequence,
+        uin,
+        random_key: context.random_key,
+        public_key: context.key_agreement.public_key(),
+        encrypted: &encrypted,
+    })?;
     Ok(CredentialExchangeRequest {
         sequence: context.sso_sequence,
         uin,
         payload,
     })
-}
-
-fn build_packet(
-    context: CredentialExchangeContext<'_>,
-    uin: u32,
-    encrypted: &[u8],
-) -> Result<Vec<u8>, CredentialExchangeError> {
-    let mut body = WireWriter::new(MAX_LOGIN_PACKET_LEN);
-    body.put_u16(8_001)?;
-    body.put_u16(WTLOGIN_COMMAND)?;
-    body.put_u16(context.wtlogin_sequence)?;
-    body.put_u32(uin)?;
-    body.put_u8(3)?;
-    body.put_u8(135)?;
-    body.put_u32(0)?;
-    body.put_u8(19)?;
-    body.put_u16(0)?;
-    body.put_u16(context.profile.app_client_version())?;
-    body.put_u32(0)?;
-    body.put_u8(1)?;
-    body.put_u8(1)?;
-    body.put_bytes(context.random_key.as_bytes())?;
-    body.put_u16(0x102)?;
-    body.put_prefixed_bytes(LengthPrefix::U16Payload, context.key_agreement.public_key())?;
-    body.put_bytes(encrypted)?;
-    body.put_u8(3)?;
-    let body = body.finish();
-    let declared_len = body
-        .len()
-        .checked_add(3)
-        .and_then(|length| u16::try_from(length).ok())
-        .ok_or(CredentialExchangeError::InvalidField)?;
-    let mut output = WireWriter::new(MAX_LOGIN_PACKET_LEN);
-    output.put_u8(2)?;
-    output.put_u16(declared_len)?;
-    output.put_bytes(&body)?;
-    Ok(output.finish())
 }

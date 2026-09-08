@@ -5,8 +5,9 @@ use qq_profile::LinuxNtProfile;
 use qq_wire::{LengthPrefix, WireReader, WireWriter};
 use zeroize::Zeroize;
 
-use crate::qr_packet::packet::{build_request_data, build_transaction, build_wtlogin_packet};
+use crate::qr_packet::packet::{build_request_data, build_transaction};
 use crate::qr_packet::response::decode_wtlogin_body;
+use crate::wtlogin::{self, TRANS_EMP_COMMAND, WtLoginPacket};
 use crate::{
     QqKeyAgreement, QrChallenge, QrPacketError, QrPollState, QrResponseContext, QrUnsignedRequest,
 };
@@ -140,13 +141,15 @@ pub fn build_qr_poll(context: QrPollContext<'_>) -> Result<QrUnsignedRequest, Qr
     let transaction = build_transaction(QR_POLL_COMMAND, &body)?;
     let data = build_request_data(context.profile, context.unix_seconds, &transaction)?;
     let encrypted = encrypt_qq_tea(&data, context.key_agreement.tea_key())?;
-    let payload = build_wtlogin_packet(
-        context.profile,
-        context.wtlogin_sequence,
-        context.random_key,
-        context.key_agreement.public_key(),
-        &encrypted,
-    )?;
+    let payload = wtlogin::encode(WtLoginPacket {
+        profile: context.profile,
+        command: TRANS_EMP_COMMAND,
+        sequence: context.wtlogin_sequence,
+        uin: 0,
+        random_key: context.random_key,
+        public_key: context.key_agreement.public_key(),
+        encrypted: &encrypted,
+    })?;
     Ok(QrUnsignedRequest::new(context.sso_sequence, payload))
 }
 
