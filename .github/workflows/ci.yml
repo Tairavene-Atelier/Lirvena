@@ -67,7 +67,7 @@ jobs:
           manifest-path: fuzz/Cargo.toml
           rust-version: 1.96.0
       - name: Install audited supply-chain tools
-        uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf
+        uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6
         with:
           tool: cargo-audit@0.22.2,cargo-cyclonedx@0.5.9
           fallback: none
