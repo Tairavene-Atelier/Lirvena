@@ -18,7 +18,7 @@ ceylith-crypto = { version = "=0.0.0", path = "../../crates/ceylith-crypto" }
 ceylith-protocol = { version = "=0.0.0", path = "../../crates/ceylith-protocol" }
 community-telemetry = { version = "=0.0.0", path = "../../crates/community-telemetry" }
 getrandom = "=0.4.3"
-futures-util = "=0.3.33"
+futures-util = "=0.3.34"
 local-state = { version = "=0.0.0", path = "../../crates/local-state" }
 notify-runtime = { version = "=0.0.0", path = "../../crates/notify-runtime" }
 qq-envelope = { version = "=0.0.0", path = "../../crates/qq-envelope" }
